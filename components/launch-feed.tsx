@@ -107,7 +107,9 @@ export function LaunchFeed() {
       const response = await fetch(`/api/snapshot/${launch.mint}`, {
         cache: "no-store",
       });
-      const payload = (await response.json()) as TokenSnapshot | { error?: string };
+      const payload = (await response.json()) as
+        | TokenSnapshot
+        | { error: string };
 
       if (!response.ok || "error" in payload) {
         throw new Error("error" in payload ? payload.error : "Snapshot failed");
