@@ -140,7 +140,7 @@ export function LaunchFeed() {
                 <th>TOKEN</th>
                 <th>MINT</th>
                 <th>CREATOR</th>
-                <th>MODE</th>
+                <th>MAYHEM</th>
                 <th>TX</th>
               </tr>
             </thead>
@@ -176,11 +176,9 @@ export function LaunchFeed() {
                   </td>
                   <td>
                     {launch.isMayhemMode ? (
-                      <span className="chip warning">MAYHEM</span>
-                    ) : launch.isHolderReward ? (
-                      <span className="chip info">HOLDER</span>
+                      <span className="chip warning">YES</span>
                     ) : (
-                      <span className="chip">NORMAL</span>
+                      <span className="chip">NO</span>
                     )}
                   </td>
                   <td className="mono">
