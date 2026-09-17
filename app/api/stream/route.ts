@@ -1,5 +1,4 @@
 import {
-  createPumpSdk,
   createSolanaConnection,
   decodeLaunch,
   looksLikeCreate,
@@ -19,11 +18,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function GET(request: Request) {
   const connection = createSolanaConnection();
-  const pump = createPumpSdk(connection);
 
   let subscriptionId: number | null = null;
   let keepAlive: ReturnType<typeof setInterval> | null = null;
   let closed = false;
+
+  const cleanup = async () => {
+    if (closed) return;
+    closed = true;
+    if (keepAlive) clearInterval(keepAlive);
+    if (subscriptionId !== null) {
+      await connection.removeOnLogsListener(subscriptionId).catch(() => undefined);
+    }
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -44,13 +51,12 @@ export async function GET(request: Request) {
           async (notification, context) => {
             if (notification.err || !looksLikeCreate(notification.logs)) return;
 
-            // A confirmed websocket notification should already be RPC-readable,
-            // but providers occasionally race their own transaction endpoint.
-            // One tiny retry prevents us from dropping a real launch for that reason.
-            for (let attempt = 0; attempt < 2; attempt += 1) {
+            // RPC websocket and transaction endpoints can briefly race each other.
+            // A short retry avoids losing a legitimate launch during that window.
+            for (let attempt = 0; attempt < 3; attempt += 1) {
               try {
                 const launch = await decodeLaunch(
-                  pump,
+                  connection,
                   notification.signature,
                   context.slot,
                 );
@@ -58,8 +64,8 @@ export async function GET(request: Request) {
                 if (launch) safeEnqueue(sse("launch", launch));
                 return;
               } catch (error) {
-                if (attempt === 0) {
-                  await sleep(350);
+                if (attempt < 2) {
+                  await sleep(300 * (attempt + 1));
                   continue;
                 }
 
@@ -92,27 +98,19 @@ export async function GET(request: Request) {
             message: "Could not subscribe to Solana. Check the RPC configuration.",
           }),
         );
-        controller.close();
         closed = true;
+        controller.close();
       }
     },
-    async cancel() {
-      closed = true;
-      if (keepAlive) clearInterval(keepAlive);
-      if (subscriptionId !== null) {
-        await connection.removeOnLogsListener(subscriptionId).catch(() => undefined);
-      }
+    cancel() {
+      return cleanup();
     },
   });
 
   request.signal.addEventListener(
     "abort",
     () => {
-      closed = true;
-      if (keepAlive) clearInterval(keepAlive);
-      if (subscriptionId !== null) {
-        void connection.removeOnLogsListener(subscriptionId).catch(() => undefined);
-      }
+      void cleanup();
     },
     { once: true },
   );
