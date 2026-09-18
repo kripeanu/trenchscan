@@ -379,3 +379,137 @@ tbody tr[data-selected="true"] {
     flex-direction: column;
   }
 }
+
+
+.early-buyers-block {
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(3, 12, 9, 0.36);
+}
+
+.early-head {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.early-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+}
+
+.early-head strong,
+.early-head span,
+.early-head em,
+.early-summary,
+.history-warning,
+.early-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.early-head strong {
+  color: var(--text);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.early-head span {
+  color: #526f65;
+  font-size: 7.5px;
+}
+
+.early-head em {
+  min-height: 23px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 199, 102, 0.36);
+  color: var(--amber);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+.early-head em[data-complete="true"] {
+  border-color: rgba(38, 243, 189, 0.36);
+  color: var(--acid);
+}
+
+.early-status {
+  min-height: 78px;
+  display: grid;
+  place-items: center;
+  padding: 16px 20px;
+  color: #617d73;
+  font-size: 8.5px;
+  line-height: 1.55;
+}
+
+.early-status.error {
+  color: #c77f82;
+}
+
+.history-warning {
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(255, 199, 102, 0.16);
+  background: rgba(255, 199, 102, 0.035);
+  color: #a98a57;
+  font-size: 7.5px;
+  line-height: 1.55;
+}
+
+.early-summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  color: #536f65;
+  font-size: 7px;
+  letter-spacing: 0.06em;
+}
+
+.early-summary b {
+  margin-right: 4px;
+  color: #a4bbb2;
+  font-size: 9px;
+}
+
+.early-table {
+  min-height: 0;
+  max-height: 430px;
+}
+
+.early-table table {
+  min-width: 940px;
+}
+
+.early-table td {
+  height: 44px;
+}
+
+@media (max-width: 760px) {
+  .early-head,
+  .early-head > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .early-head {
+    gap: 9px;
+  }
+
+  .early-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
