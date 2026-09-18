@@ -12,6 +12,7 @@ export async function GET(
   const { mint } = await context.params;
   const { searchParams } = new URL(request.url);
   const slotParam = searchParams.get("fromSlot");
+  const launchSignature = searchParams.get("launchSig");
   const creatorParam = searchParams.get("creator");
 
   let fromSlot: number;
@@ -21,8 +22,13 @@ export async function GET(
     if (creatorParam) new PublicKey(creatorParam);
 
     fromSlot = Number(slotParam);
-    if (!Number.isSafeInteger(fromSlot) || fromSlot <= 0) {
-      throw new Error("bad slot");
+    if (
+      !Number.isSafeInteger(fromSlot) ||
+      fromSlot <= 0 ||
+      !launchSignature ||
+      launchSignature.length < 60
+    ) {
+      throw new Error("bad launch boundary");
     }
   } catch {
     return Response.json(
@@ -36,6 +42,7 @@ export async function GET(
       createSolanaConnection(),
       mint,
       fromSlot,
+      launchSignature,
       creatorParam,
     );
 
