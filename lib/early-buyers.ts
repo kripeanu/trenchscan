@@ -188,9 +188,10 @@ export async function buildEarlyBuyerScan(
       if (delta.wallet === bondingCurve.toBase58()) continue;
       if (firstByWallet.has(delta.wallet)) continue;
 
+      const blockTime = info.blockTime ?? null;
       const secondsAfterLaunch =
-        launchBlockTime !== null && info.blockTime !== null
-          ? Math.max(0, info.blockTime - launchBlockTime)
+        launchBlockTime !== null && blockTime !== null
+          ? Math.max(0, blockTime - launchBlockTime)
           : null;
 
       firstByWallet.set(delta.wallet, {
@@ -198,7 +199,7 @@ export async function buildEarlyBuyerScan(
         wallet: delta.wallet,
         signature: info.signature,
         slot: info.slot,
-        blockTime: info.blockTime,
+        blockTime,
         secondsAfterLaunch,
         rawTokenDelta: delta.rawDelta.toString(),
         uiTokenDelta: rawToUi(delta.rawDelta, supplyResponse.value.decimals),
