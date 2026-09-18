@@ -41,11 +41,24 @@ For each decoded early wallet TrenchScan shows:
 
 The replay is deliberately bounded. If RPC history does not reach the launch boundary, the UI says **PARTIAL WINDOW** instead of pretending those wallets were literally first.
 
+### Same bankroll?
+
+From the early-buyer set, TrenchScan can run an on-demand direct-funding trace. For up to 12 early wallets it looks backward before launch for recent native-SOL transfers and groups wallets that share the same direct funder.
+
+The UI shows:
+
+- shared direct funder
+- linked early wallets
+- SOL amount received
+- time before launch
+- explorer receipt for every funding transfer
+
+A shared funder is a **clue, not proof of common control**. CEX hot wallets and payout services can fund unrelated traders, so TrenchScan does not call a shared source a cabal by itself.
+
 ## What comes next
 
 The differentiating layer:
 
-- **Same bankroll?** — wallet funding graph and shared-funder clusters
 - **Dev baggage** — creator history and prior launches
 - **Trench Brief** — plain-English, evidence-backed launch signals
 
@@ -81,4 +94,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.3 — live launches + holder snapshot + who-aped-first replay`
+`v0.4 — live launches + holder snapshot + who-aped-first + same-bankroll trace`

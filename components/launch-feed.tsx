@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TrenchBrand } from "@/components/trench-brand";
-import type { EarlyBuyerScan, Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
+import type { EarlyBuyerScan, FundingTrace, Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -43,6 +43,13 @@ function afterLaunchLabel(seconds: number | null) {
   return `+${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+function beforeLaunchLabel(seconds: number | null) {
+  if (seconds === null) return "—";
+  if (seconds < 60) return `${seconds}s before`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m before`;
+  return `${Math.floor(seconds / 3600)}h before`;
+}
+
 function totalSupplyPct(amount: number | null, supply: number | null) {
   if (amount === null || supply === null || supply <= 0) return null;
   return (amount / supply) * 100;
@@ -68,6 +75,9 @@ export function LaunchFeed() {
   const [earlyBuyers, setEarlyBuyers] = useState<EarlyBuyerScan | null>(null);
   const [earlyState, setEarlyState] = useState<SnapshotState>("idle");
   const [earlyError, setEarlyError] = useState<string | null>(null);
+  const [fundingTrace, setFundingTrace] = useState<FundingTrace | null>(null);
+  const [fundingState, setFundingState] = useState<SnapshotState>("idle");
+  const [fundingError, setFundingError] = useState<string | null>(null);
   const activeScan = useRef<string | null>(null);
 
   useEffect(() => {
@@ -153,6 +163,48 @@ export function LaunchFeed() {
     }
   }
 
+  async function traceFunding() {
+    if (!selected || !earlyBuyers?.buyers.length) return;
+
+    const scanId = selected.id;
+    setFundingTrace(null);
+    setFundingError(null);
+    setFundingState("loading");
+
+    try {
+      const response = await fetch("/api/funding-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          launchSlot: selected.slot,
+          wallets: earlyBuyers.buyers
+            .slice(0, 12)
+            .map((buyer) => buyer.wallet),
+        }),
+      });
+      const payload = (await response.json()) as
+        | FundingTrace
+        | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload ? payload.error : "Funding trace failed",
+        );
+      }
+
+      if (activeScan.current !== scanId) return;
+      setFundingTrace(payload);
+      setFundingState("ready");
+    } catch (error) {
+      if (activeScan.current !== scanId) return;
+      setFundingState("error");
+      setFundingError(
+        error instanceof Error ? error.message : "Could not trace funding",
+      );
+    }
+  }
+
   async function scanLaunch(launch: Launch) {
     activeScan.current = launch.id;
     setSelected(launch);
@@ -162,6 +214,9 @@ export function LaunchFeed() {
     setEarlyBuyers(null);
     setEarlyError(null);
     setEarlyState("loading");
+    setFundingTrace(null);
+    setFundingError(null);
+    setFundingState("idle");
     void loadEarlyBuyers(launch);
 
     try {
@@ -465,6 +520,9 @@ export function LaunchFeed() {
                   setEarlyBuyers(null);
                   setEarlyState("idle");
                   setEarlyError(null);
+                  setFundingTrace(null);
+                  setFundingState("idle");
+                  setFundingError(null);
                 }}
               >
                 CLOSE ×
@@ -632,6 +690,111 @@ export function LaunchFeed() {
                         No external positive token deltas decoded in this window yet.
                       </div>
                     )}
+
+                    {earlyBuyers.buyers.length >= 2 && (
+                      <div className="funding-trace">
+                        <div className="funding-cta">
+                          <div>
+                            <strong>SAME BANKROLL?</strong>
+                            <span>
+                              trace the most recent direct SOL funder for the first 12 wallets
+                            </span>
+                          </div>
+                          <button
+                            className="trace-button"
+                            type="button"
+                            onClick={() => void traceFunding()}
+                            disabled={fundingState === "loading"}
+                          >
+                            {fundingState === "loading"
+                              ? "TRACING…"
+                              : fundingState === "ready"
+                                ? "TRACE AGAIN"
+                                : "TRACE FUNDING →"}
+                          </button>
+                        </div>
+
+                        {fundingState === "error" && (
+                          <div className="funding-status error">
+                            Funding trace failed. {fundingError}
+                          </div>
+                        )}
+
+                        {fundingTrace && fundingState === "ready" && (
+                          <div className="funding-result">
+                            <div className="funding-meta">
+                              <span>
+                                <b>{fundingTrace.walletsChecked}</b> WALLETS CHECKED
+                              </span>
+                              <span>
+                                <b>{fundingTrace.linksFound}</b> DIRECT FUNDERS FOUND
+                              </span>
+                              <span>
+                                <b>{fundingTrace.clusters.length}</b> SHARED SOURCES
+                              </span>
+                            </div>
+
+                            {fundingTrace.clusters.length ? (
+                              <div className="cluster-grid">
+                                {fundingTrace.clusters.slice(0, 4).map((cluster) => (
+                                  <article className="cluster-card" key={cluster.source}>
+                                    <div className="cluster-head">
+                                      <div>
+                                        <span>SHARED DIRECT FUNDER</span>
+                                        <a
+                                          href={`https://solscan.io/account/${cluster.source}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          {short(cluster.source, 6, 5)} ↗
+                                        </a>
+                                      </div>
+                                      <strong>{cluster.memberCount} WALLETS</strong>
+                                    </div>
+
+                                    <div className="cluster-links">
+                                      {cluster.links.map((link) => (
+                                        <div key={link.buyer}>
+                                          <a
+                                            href={`https://solscan.io/account/${link.buyer}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            {short(link.buyer)}
+                                          </a>
+                                          <span>
+                                            {link.amountSol?.toFixed(3) ?? "—"} SOL
+                                          </span>
+                                          <span>{beforeLaunchLabel(link.secondsBeforeLaunch)}</span>
+                                          <a
+                                            href={`https://solscan.io/tx/${link.signature}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            receipt ↗
+                                          </a>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </article>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="funding-status">
+                                No shared direct SOL funder found among the wallets we could trace.
+                                That is not proof they are unrelated — it just means this direct-funder
+                                pass did not connect them.
+                              </div>
+                            )}
+
+                            <div className="funding-caveat">
+                              CLUE, NOT PROOF: a CEX hot wallet or payout service can fund unrelated
+                              traders. TrenchScan calls this a shared direct funder, not shared ownership.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </section>
@@ -740,9 +903,9 @@ export function LaunchFeed() {
                   <div className="bottom-line">
                     <span>BOTTOM LINE</span>
                     <p>
-                      No fairy tales: bags + first buyers are chain-derived reads,
-                      not a magic risk score. Same-bankroll funding links and dev
-                      baggage are the next layer.
+                      No fairy tales: bags + first buyers are chain-derived reads.
+                      The same-bankroll trace only flags shared direct funders —
+                      a clue, not proof of common control. Dev baggage comes next.
                     </p>
                   </div>
                 </aside>
@@ -754,7 +917,7 @@ export function LaunchFeed() {
 
       <footer className="footer-note">
         <span>TrenchScan v0.2 · built for trenchers · backed by chain data</span>
-        <span>who aped first? live · next: same bankroll? · dev baggage</span>
+        <span>who aped first? live · same bankroll? live · next: dev baggage</span>
       </footer>
     </main>
   );
