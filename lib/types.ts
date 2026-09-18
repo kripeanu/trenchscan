@@ -68,6 +68,35 @@ export type EarlyBuyerScan = {
   buyers: EarlyBuyerRow[];
 };
 
+
+export type FundingLink = {
+  buyer: string;
+  source: string;
+  signature: string;
+  blockTime: number | null;
+  secondsBeforeLaunch: number | null;
+  lamports: string;
+  amountSol: number | null;
+};
+
+export type FundingCluster = {
+  source: string;
+  memberCount: number;
+  totalSol: number;
+  buyers: string[];
+  links: FundingLink[];
+};
+
+export type FundingTrace = {
+  sampledAt: number;
+  launchSlot: number;
+  launchBlockTime: number | null;
+  walletsChecked: number;
+  linksFound: number;
+  links: FundingLink[];
+  clusters: FundingCluster[];
+};
+
 export type StreamStatus = {
   state: "connecting" | "live" | "error";
   message?: string;
