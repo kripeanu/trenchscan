@@ -927,3 +927,47 @@ tbody tr[data-selected="true"] {
     grid-template-columns: 1fr;
   }
 }
+
+
+.take-list > div[data-tone="warning"] {
+  background: linear-gradient(90deg, rgba(255, 199, 102, 0.028), transparent 72%);
+}
+
+.take-list > div[data-tone="danger"] {
+  background: linear-gradient(90deg, rgba(255, 102, 108, 0.04), transparent 72%);
+}
+
+.take-list i[data-tone="neutral"] {
+  background: #668178;
+  box-shadow: none;
+}
+
+.take-list i[data-tone="warning"] {
+  background: var(--amber);
+  box-shadow: 0 0 11px rgba(255, 199, 102, 0.45);
+}
+
+.take-list i[data-tone="danger"] {
+  background: var(--danger);
+  box-shadow: 0 0 11px rgba(255, 102, 108, 0.5);
+}
+
+.take-list b strong {
+  color: var(--acid);
+  font: inherit;
+}
+
+.take-list > div[data-tone="warning"] b strong {
+  color: var(--amber);
+}
+
+.take-list > div[data-tone="danger"] b strong {
+  color: var(--danger);
+}
+
+.bottom-line small {
+  display: block;
+  margin-top: 9px;
+  color: #4e6d62;
+  font: 7px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
