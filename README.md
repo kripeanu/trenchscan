@@ -77,6 +77,20 @@ The brief uses explicit threshold rules and visible evidence — **not a hidden 
 
 If relationship checks have not been run yet, the brief says so instead of filling the gaps with guesses.
 
+### Real-launch replay
+
+The homepage also has **REPLAY REAL LAUNCH** for development, demos and judging. It asks Solana RPC for recent Pump program history, finds a real decodable `create_v2` launch, drops that historical launch into the same UI, and immediately runs the normal TrenchScan pipeline.
+
+This is not seeded fake data. Replay uses:
+
+- a real Pump transaction
+- the same launch decoder as the websocket listener
+- the same holder snapshot endpoint
+- the same who-aped-first replay
+- the same optional funding + dev-history checks
+
+The replay API also accepts an exact transaction signature so a known launch can be reproduced later.
+
 ## What comes next
 
 - richer funding graph / second-hop investigation where useful
@@ -115,4 +129,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.6 — live trenches + evidence layers + dynamic Trench Brief`
+`v0.7 — live trenches + evidence layers + Trench Brief + real-launch replay`
