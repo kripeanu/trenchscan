@@ -91,6 +91,15 @@ This is not seeded fake data. Replay uses:
 
 The replay API also accepts an exact transaction signature so a known launch can be reproduced later.
 
+Replay links are now shareable with `?replay=<transaction-signature>`. Opening one automatically loads that real transaction into TrenchScan, which makes a judge/demo flow reproducible instead of relying on whatever launches happen to appear live.
+
+Inside the token scan, **RUN FULL RECEIPT PASS** runs the two optional relationship checks together once the early-buyer replay is ready:
+
+- Same Bankroll direct-funder trace
+- Dev Baggage creator-history scan
+
+The individual controls remain available, but the one-click pass is the faster demo path.
+
 ## What comes next
 
 - richer funding graph / second-hop investigation where useful
@@ -129,4 +138,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.7 — live trenches + evidence layers + Trench Brief + real-launch replay`
+`v0.8 — shareable real-launch replay + one-click full receipt pass`
