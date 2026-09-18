@@ -12,6 +12,15 @@ Built for **Colosseum Crypto World's Fair 2026**.
 
 TrenchScan subscribes directly to Solana and listens for Pump `create_v2` launches. Confirmed launches are decoded from the transaction and streamed to the UI over SSE.
 
+The live path now uses one shared launch hub per server process instead of opening a fresh Solana websocket subscription for every browser tab. The hub keeps the latest 80 decoded launches in memory and immediately backfills new SSE clients before continuing with live events.
+
+That means:
+
+- one Solana program subscription can fan out to many connected browsers
+- a page refresh does not start from an empty feed while the server process stays alive
+- RPC websocket load no longer scales linearly with open tabs
+- initial subscription failures stay connected to the browser and retry with backoff
+
 The feed does not use fake demo rows. If a token appears, TrenchScan observed it on-chain.
 
 ### Trench snapshot
@@ -138,4 +147,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.8 — shareable real-launch replay + one-click full receipt pass`
+`v0.9 — shared live launch hub + buffered SSE fan-out`
