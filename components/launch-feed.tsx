@@ -663,9 +663,9 @@ export function LaunchFeed() {
 
       <section className="stats-grid" aria-label="Session statistics">
         <div className="stat">
-          <span>FRESH THIS SESSION</span>
+          <span>FRESH IN BUFFER</span>
           <strong>{launches.length}</strong>
-          <small>tokens that actually hit our listener</small>
+          <small>recent launches cached by the shared listener</small>
         </div>
         <div className="stat">
           <span>OLDEST IN FEED</span>
@@ -689,7 +689,7 @@ export function LaunchFeed() {
           <div className="panel-head">
             <div>
               <span className="section-title">FRESH TRENCHES</span>
-              <span className="section-note">live Pump launches · newest first</span>
+              <span className="section-note">live Pump launches + server buffer · newest first</span>
             </div>
             <div className="legend">
               <span className="legend-dot" /> real-time
@@ -1372,7 +1372,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.7 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.9 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
