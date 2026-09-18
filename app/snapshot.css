@@ -513,3 +513,233 @@ tbody tr[data-selected="true"] {
     padding-bottom: 12px;
   }
 }
+
+
+.funding-trace {
+  border-top: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(16, 41, 32, 0.24), rgba(5, 14, 11, 0.2));
+}
+
+.funding-cta {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 14px 20px;
+}
+
+.funding-cta > div {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+}
+
+.funding-cta strong,
+.funding-cta span,
+.trace-button,
+.funding-status,
+.funding-meta,
+.cluster-card,
+.funding-caveat {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.funding-cta strong {
+  color: var(--text);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.funding-cta span {
+  color: #536f65;
+  font-size: 7.5px;
+}
+
+.trace-button {
+  min-height: 32px;
+  flex: 0 0 auto;
+  padding: 0 11px;
+  border: 1px solid rgba(38, 243, 189, 0.38);
+  background: rgba(38, 243, 189, 0.035);
+  color: var(--acid);
+  cursor: pointer;
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.trace-button:hover:not(:disabled) {
+  border-color: var(--acid);
+  background: rgba(38, 243, 189, 0.08);
+}
+
+.trace-button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.funding-status {
+  min-height: 66px;
+  display: grid;
+  place-items: center;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line-soft);
+  color: #668178;
+  font-size: 8px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.funding-status.error {
+  color: #c77f82;
+}
+
+.funding-result {
+  border-top: 1px solid var(--line-soft);
+}
+
+.funding-meta {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  color: #526e64;
+  font-size: 7px;
+  letter-spacing: 0.06em;
+}
+
+.funding-meta b {
+  margin-right: 4px;
+  color: #a4bbb2;
+  font-size: 9px;
+}
+
+.cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 20px 16px;
+}
+
+.cluster-card {
+  min-width: 0;
+  border: 1px solid rgba(38, 243, 189, 0.19);
+  background: rgba(4, 16, 12, 0.55);
+}
+
+.cluster-head {
+  min-height: 61px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cluster-head > div {
+  min-width: 0;
+}
+
+.cluster-head span {
+  display: block;
+  margin-bottom: 6px;
+  color: #4d7164;
+  font-size: 6.5px;
+  letter-spacing: 0.09em;
+}
+
+.cluster-head a {
+  color: #b8d2c9;
+  font-size: 9px;
+}
+
+.cluster-head > strong {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border: 1px solid rgba(38, 243, 189, 0.27);
+  color: var(--acid);
+  font-size: 7px;
+  letter-spacing: 0.07em;
+}
+
+.cluster-links {
+  display: grid;
+}
+
+.cluster-links > div {
+  min-height: 39px;
+  display: grid;
+  grid-template-columns: minmax(82px, 1.2fr) .7fr .8fr .7fr;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(22, 53, 44, 0.48);
+  color: #648078;
+  font-size: 7px;
+}
+
+.cluster-links > div:last-child {
+  border-bottom: 0;
+}
+
+.cluster-links a:first-child {
+  overflow: hidden;
+  color: #92aaa1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-links a:last-child {
+  color: #5f8f7f;
+  text-align: right;
+}
+
+.funding-caveat {
+  padding: 10px 20px 12px;
+  border-top: 1px solid rgba(255, 199, 102, 0.14);
+  background: rgba(255, 199, 102, 0.025);
+  color: #957b52;
+  font-size: 7px;
+  line-height: 1.55;
+}
+
+@media (max-width: 960px) {
+  .cluster-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .funding-cta,
+  .funding-cta > div,
+  .funding-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .funding-cta {
+    gap: 11px;
+  }
+
+  .funding-meta {
+    gap: 7px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .cluster-links > div {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cluster-links a:last-child {
+    text-align: left;
+  }
+}
