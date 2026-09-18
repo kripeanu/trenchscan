@@ -69,11 +69,19 @@ It shows:
 
 The current pass samples the 60 creator-wallet signatures immediately before launch. If no prior creates are found, TrenchScan says exactly that — it does **not** claim the wallet is a first-time dev. It also does not label prior launches as rugs without separate evidence.
 
+### Trench Brief
+
+The token panel now synthesizes the layers above into a compact evidence brief. It combines holder distribution, decoded early-wallet concentration/timing, shared direct funders when traced, creator history when sampled, and creator bag size.
+
+The brief uses explicit threshold rules and visible evidence — **not a hidden composite score**. It can say things such as **KEEP BOTH EYES OPEN**, **MULTIPLE RED FLAGS**, or **MORE RECEIPTS NEEDED**, then shows exactly which observations produced that read.
+
+If relationship checks have not been run yet, the brief says so instead of filling the gaps with guesses.
+
 ## What comes next
 
-The differentiating layer:
-
-- **Trench Brief** — plain-English, evidence-backed launch signals combining the layers above
+- richer funding graph / second-hop investigation where useful
+- stronger dev history context without inventing "rug" labels
+- additional Solana launchpads after the Pump v1 path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
 
@@ -107,4 +115,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.5 — live launches + holder snapshot + who-aped-first + same-bankroll + dev baggage`
+`v0.6 — live trenches + evidence layers + dynamic Trench Brief`
