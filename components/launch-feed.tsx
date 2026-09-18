@@ -283,6 +283,7 @@ export function LaunchFeed() {
   const [replayIds, setReplayIds] = useState<Set<string>>(() => new Set());
   const [replayState, setReplayState] = useState<SnapshotState>("idle");
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const activeScan = useRef<string | null>(null);
 
   useEffect(() => {
@@ -330,17 +331,27 @@ export function LaunchFeed() {
     };
   }, []);
 
+  useEffect(() => {
+    const signature = new URLSearchParams(window.location.search).get("replay");
+    if (signature) void replayRealLaunch(signature);
+  }, []);
+
   const sessionAge = useMemo(() => {
     if (!launches.length) return "—";
     return ageLabel(launches[launches.length - 1].seenAt, now);
   }, [launches, now]);
 
-  async function replayRealLaunch() {
+  async function replayRealLaunch(signature?: string) {
     setReplayState("loading");
     setReplayError(null);
 
     try {
-      const response = await fetch("/api/replay", { cache: "no-store" });
+      const params = signature
+        ? `?${new URLSearchParams({ signature }).toString()}`
+        : "";
+      const response = await fetch(`/api/replay${params}`, {
+        cache: "no-store",
+      });
       const payload = (await response.json()) as ReplayLaunch | { error: string };
 
       if (!response.ok || "error" in payload) {
@@ -358,6 +369,11 @@ export function LaunchFeed() {
         payload.launch,
         ...current.filter((launch) => launch.id !== payload.launch.id),
       ].slice(0, MAX_ROWS));
+
+      const replayUrl = new URL(window.location.href);
+      replayUrl.searchParams.set("replay", payload.launch.signature);
+      window.history.replaceState(null, "", replayUrl);
+
       setReplayState("ready");
       void scanLaunch(payload.launch);
 
@@ -372,6 +388,27 @@ export function LaunchFeed() {
         error instanceof Error ? error.message : "Could not replay a real launch",
       );
     }
+  }
+
+  async function copyReplayLink() {
+    if (!selected) return;
+
+    const replayUrl = new URL(window.location.href);
+    replayUrl.searchParams.set("replay", selected.signature);
+
+    try {
+      await navigator.clipboard.writeText(replayUrl.toString());
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1800);
+    } catch {
+      setShareCopied(false);
+    }
+  }
+
+  function runFullReceiptPass() {
+    if (earlyState !== "ready") return;
+    void checkDevBaggage();
+    if (earlyBuyers?.buyers.length) void traceFunding();
   }
 
   async function loadEarlyBuyers(launch: Launch) {
@@ -487,6 +524,7 @@ export function LaunchFeed() {
 
   async function scanLaunch(launch: Launch) {
     activeScan.current = launch.id;
+    setShareCopied(false);
     setSelected(launch);
     setSnapshot(null);
     setSnapshotError(null);
@@ -547,6 +585,9 @@ export function LaunchFeed() {
         devBagPct,
       })
     : null;
+  const fullPassBusy =
+    fundingState === "loading" || devState === "loading";
+  const fullPassDone = fundingTrace !== null && devHistory !== null;
 
   return (
     <main className="terminal-shell">
@@ -817,12 +858,36 @@ export function LaunchFeed() {
         <section className="scan-panel" id="trench-take" aria-live="polite">
           <div className="scan-heading">
             <div>
-              <span className="eyebrow">TRENCH SNAPSHOT // DISTRIBUTION READ</span>
+              <span className="eyebrow">
+                {replayIds.has(selected.id)
+                  ? "REPLAY SNAPSHOT // REAL ON-CHAIN TX"
+                  : "TRENCH SNAPSHOT // DISTRIBUTION READ"}
+              </span>
               <h2>
                 ${selected.symbol} <span>{selected.name}</span>
               </h2>
             </div>
             <div className="scan-heading-actions">
+              <button
+                className="deep-scan-button"
+                type="button"
+                data-ready={fullPassDone}
+                disabled={earlyState !== "ready" || fullPassBusy}
+                onClick={runFullReceiptPass}
+              >
+                {fullPassBusy
+                  ? "RUNNING FULL PASS…"
+                  : fullPassDone
+                    ? "RERUN FULL PASS"
+                    : "RUN FULL RECEIPT PASS"}
+              </button>
+              <button
+                className="share-button"
+                type="button"
+                onClick={() => void copyReplayLink()}
+              >
+                {shareCopied ? "LINK COPIED ✓" : "COPY REPLAY LINK"}
+              </button>
               <a
                 className="explorer-link"
                 href={`https://solscan.io/token/${selected.mint}`}
@@ -848,6 +913,7 @@ export function LaunchFeed() {
                   setDevHistory(null);
                   setDevState("idle");
                   setDevError(null);
+                  setShareCopied(false);
                 }}
               >
                 CLOSE ×
