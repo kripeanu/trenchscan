@@ -971,3 +971,62 @@ tbody tr[data-selected="true"] {
   color: #4e6d62;
   font: 7px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+
+.scan-heading-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.deep-scan-button,
+.share-button {
+  min-height: 31px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--line-bright);
+  background: transparent;
+  cursor: pointer;
+  font: 750 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.075em;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.deep-scan-button {
+  border-color: rgba(38, 243, 189, 0.35);
+  background: rgba(38, 243, 189, 0.03);
+  color: var(--acid);
+}
+
+.deep-scan-button[data-ready="true"] {
+  border-color: rgba(124, 255, 178, 0.45);
+  color: var(--acid-2);
+}
+
+.share-button {
+  border-color: rgba(88, 207, 255, 0.25);
+  color: var(--cyan);
+}
+
+.deep-scan-button:hover:not(:disabled),
+.share-button:hover {
+  background: rgba(38, 243, 189, 0.07);
+  border-color: var(--acid);
+}
+
+.share-button:hover {
+  background: rgba(88, 207, 255, 0.06);
+  border-color: var(--cyan);
+}
+
+.deep-scan-button:disabled {
+  cursor: progress;
+  opacity: 0.48;
+}
+
+@media (max-width: 760px) {
+  .scan-heading-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
