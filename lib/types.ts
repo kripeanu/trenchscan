@@ -97,6 +97,25 @@ export type FundingTrace = {
   clusters: FundingCluster[];
 };
 
+export type DevLaunchRow = {
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+  name: string;
+  symbol: string;
+  mint: string;
+  isMayhemMode: boolean | null;
+};
+
+export type DevHistoryScan = {
+  creator: string;
+  sampledAt: number;
+  signaturesSampled: number;
+  transactionsParsed: number;
+  oldestSampledBlockTime: number | null;
+  priorLaunches: DevLaunchRow[];
+};
+
 export type StreamStatus = {
   state: "connecting" | "live" | "error";
   message?: string;
