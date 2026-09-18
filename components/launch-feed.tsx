@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TrenchBrand } from "@/components/trench-brand";
-import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
+import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, Launch, ReplayLaunch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -280,6 +280,9 @@ export function LaunchFeed() {
   const [devHistory, setDevHistory] = useState<DevHistoryScan | null>(null);
   const [devState, setDevState] = useState<SnapshotState>("idle");
   const [devError, setDevError] = useState<string | null>(null);
+  const [replayIds, setReplayIds] = useState<Set<string>>(() => new Set());
+  const [replayState, setReplayState] = useState<SnapshotState>("idle");
+  const [replayError, setReplayError] = useState<string | null>(null);
   const activeScan = useRef<string | null>(null);
 
   useEffect(() => {
@@ -331,6 +334,45 @@ export function LaunchFeed() {
     if (!launches.length) return "—";
     return ageLabel(launches[launches.length - 1].seenAt, now);
   }, [launches, now]);
+
+  async function replayRealLaunch() {
+    setReplayState("loading");
+    setReplayError(null);
+
+    try {
+      const response = await fetch("/api/replay", { cache: "no-store" });
+      const payload = (await response.json()) as ReplayLaunch | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload ? payload.error : "Replay lookup failed",
+        );
+      }
+
+      setReplayIds((current) => {
+        const next = new Set(current);
+        next.add(payload.launch.id);
+        return next;
+      });
+      setLaunches((current) => [
+        payload.launch,
+        ...current.filter((launch) => launch.id !== payload.launch.id),
+      ].slice(0, MAX_ROWS));
+      setReplayState("ready");
+      void scanLaunch(payload.launch);
+
+      window.setTimeout(() => {
+        document
+          .getElementById("trench-take")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
+    } catch (error) {
+      setReplayState("error");
+      setReplayError(
+        error instanceof Error ? error.message : "Could not replay a real launch",
+      );
+    }
+  }
 
   async function loadEarlyBuyers(launch: Launch) {
     try {
@@ -484,7 +526,9 @@ export function LaunchFeed() {
     }
   }
 
-  const newestSignals = launches.slice(0, 5);
+  const newestSignals = launches
+    .filter((launch) => !replayIds.has(launch.id))
+    .slice(0, 5);
 
   const devHolder =
     snapshot && selected
@@ -543,8 +587,28 @@ export function LaunchFeed() {
           </p>
           <div className="hero-actions">
             <a className="primary-cta" href="#fresh-trenches">START SCANNING →</a>
+            <button
+              className="replay-cta"
+              type="button"
+              onClick={() => void replayRealLaunch()}
+              disabled={replayState === "loading"}
+            >
+              {replayState === "loading"
+                ? "FINDING REAL LAUNCH…"
+                : "REPLAY REAL LAUNCH"}
+            </button>
             <span className="hero-proof">chain first · receipts visible · no magic score</span>
           </div>
+          {replayState === "error" && (
+            <div className="replay-message error">
+              Couldn&apos;t load replay. {replayError}
+            </div>
+          )}
+          {replayState === "ready" && (
+            <div className="replay-message">
+              Real on-chain launch loaded. Same decoder, same scan pipeline.
+            </div>
+          )}
         </div>
 
         <div className="hero-brief">
@@ -552,7 +616,7 @@ export function LaunchFeed() {
           <strong>See the launch.</strong>
           <strong>Read the bags.</strong>
           <strong>Don&apos;t get farmed.</strong>
-          <small>who aped first is live · same-bankroll comes next</small>
+          <small>live feed + real-launch replay · evidence stays verifiable</small>
         </div>
       </section>
 
@@ -607,11 +671,22 @@ export function LaunchFeed() {
               </thead>
               <tbody>
                 {launches.map((launch) => (
-                  <tr key={launch.id} data-selected={selected?.id === launch.id}>
-                    <td className="mono age-cell">{ageLabel(launch.seenAt, now)}</td>
+                  <tr
+                    key={launch.id}
+                    data-selected={selected?.id === launch.id}
+                    data-replay={replayIds.has(launch.id)}
+                  >
+                    <td className="mono age-cell">
+                      {replayIds.has(launch.id) ? "REPLAY" : ageLabel(launch.seenAt, now)}
+                    </td>
                     <td>
                       <div className="token-cell">
-                        <strong>${launch.symbol}</strong>
+                        <strong>
+                          ${launch.symbol}
+                          {replayIds.has(launch.id) && (
+                            <em className="replay-chip">REAL TX</em>
+                          )}
+                        </strong>
                         <span>{launch.name}</span>
                       </div>
                     </td>
@@ -1231,8 +1306,8 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.2 · built for trenchers · backed by chain data</span>
-        <span>trench brief live · every signal stays receipt-backed</span>
+        <span>TrenchScan v0.7 · built for trenchers · backed by chain data</span>
+        <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
   );

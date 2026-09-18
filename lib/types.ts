@@ -116,6 +116,12 @@ export type DevHistoryScan = {
   priorLaunches: DevLaunchRow[];
 };
 
+export type ReplayLaunch = {
+  launch: Launch;
+  launchBlockTime: number | null;
+  replayedAt: number;
+};
+
 export type StreamStatus = {
   state: "connecting" | "live" | "error";
   message?: string;
