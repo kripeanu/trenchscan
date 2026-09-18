@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TrenchBrand } from "@/components/trench-brand";
-import type { Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
+import type { EarlyBuyerScan, Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -37,6 +37,12 @@ function compactNumber(value: number | null) {
   }).format(value);
 }
 
+function afterLaunchLabel(seconds: number | null) {
+  if (seconds === null) return "—";
+  if (seconds < 60) return `+${seconds}s`;
+  return `+${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
 function totalSupplyPct(amount: number | null, supply: number | null) {
   if (amount === null || supply === null || supply <= 0) return null;
   return (amount / supply) * 100;
@@ -59,6 +65,10 @@ export function LaunchFeed() {
   const [snapshot, setSnapshot] = useState<TokenSnapshot | null>(null);
   const [snapshotState, setSnapshotState] = useState<SnapshotState>("idle");
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [earlyBuyers, setEarlyBuyers] = useState<EarlyBuyerScan | null>(null);
+  const [earlyState, setEarlyState] = useState<SnapshotState>("idle");
+  const [earlyError, setEarlyError] = useState<string | null>(null);
+  const activeScan = useRef<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -110,11 +120,48 @@ export function LaunchFeed() {
     return ageLabel(launches[launches.length - 1].seenAt, now);
   }, [launches, now]);
 
+  async function loadEarlyBuyers(launch: Launch) {
+    try {
+      const params = new URLSearchParams({
+        fromSlot: String(launch.slot),
+        creator: launch.creator,
+      });
+      const response = await fetch(
+        `/api/early-buyers/${launch.mint}?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      const payload = (await response.json()) as
+        | EarlyBuyerScan
+        | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload ? payload.error : "Early-buyer scan failed",
+        );
+      }
+
+      if (activeScan.current !== launch.id) return;
+      setEarlyBuyers(payload);
+      setEarlyState("ready");
+    } catch (error) {
+      if (activeScan.current !== launch.id) return;
+      setEarlyState("error");
+      setEarlyError(
+        error instanceof Error ? error.message : "Could not replay early buyers",
+      );
+    }
+  }
+
   async function scanLaunch(launch: Launch) {
+    activeScan.current = launch.id;
     setSelected(launch);
     setSnapshot(null);
     setSnapshotError(null);
     setSnapshotState("loading");
+    setEarlyBuyers(null);
+    setEarlyError(null);
+    setEarlyState("loading");
+    void loadEarlyBuyers(launch);
 
     try {
       const response = await fetch(`/api/snapshot/${launch.mint}`, {
@@ -128,9 +175,11 @@ export function LaunchFeed() {
         throw new Error("error" in payload ? payload.error : "Snapshot failed");
       }
 
+      if (activeScan.current !== launch.id) return;
       setSnapshot(payload);
       setSnapshotState("ready");
     } catch (error) {
+      if (activeScan.current !== launch.id) return;
       setSnapshotState("error");
       setSnapshotError(
         error instanceof Error ? error.message : "Could not scan token",
@@ -200,7 +249,7 @@ export function LaunchFeed() {
           <strong>See the launch.</strong>
           <strong>Read the bags.</strong>
           <strong>Don&apos;t get farmed.</strong>
-          <small>same-bankroll + early-buyer intel is next</small>
+          <small>who aped first is live · same-bankroll comes next</small>
         </div>
       </section>
 
@@ -408,9 +457,13 @@ export function LaunchFeed() {
                 className="close-button"
                 type="button"
                 onClick={() => {
+                  activeScan.current = null;
                   setSelected(null);
                   setSnapshot(null);
                   setSnapshotState("idle");
+                  setEarlyBuyers(null);
+                  setEarlyState("idle");
+                  setEarlyError(null);
                 }}
               >
                 CLOSE ×
@@ -474,6 +527,113 @@ export function LaunchFeed() {
                 <span>sampled {ageLabel(snapshot.sampledAt, now)} ago</span>
                 <span>* curve stash excluded from bag concentration</span>
               </div>
+
+              <section className="early-buyers-block">
+                <div className="early-head">
+                  <div>
+                    <strong>WHO APED FIRST?</strong>
+                    <span>
+                      earliest wallet balance increases we can replay on the Pump curve
+                    </span>
+                  </div>
+                  {earlyBuyers && earlyState === "ready" && (
+                    <em data-complete={earlyBuyers.historyComplete}>
+                      {earlyBuyers.historyComplete ? "LAUNCH WINDOW FOUND" : "PARTIAL WINDOW"}
+                    </em>
+                  )}
+                </div>
+
+                {earlyState === "loading" && (
+                  <div className="early-status">Replaying the first curve trades…</div>
+                )}
+
+                {earlyState === "error" && (
+                  <div className="early-status error">
+                    Early-buyer RPC read failed. Holder snapshot is still valid. {earlyError}
+                  </div>
+                )}
+
+                {earlyBuyers && earlyState === "ready" && (
+                  <>
+                    {!earlyBuyers.historyComplete && (
+                      <div className="history-warning">
+                        BUSY TRENCH: our bounded RPC window did not reach the launch boundary.
+                        These are the earliest wallets in the sampled window — not a claim that
+                        they were literally first.
+                      </div>
+                    )}
+
+                    <div className="early-summary">
+                      <span><b>{earlyBuyers.buyers.length}</b> EARLY WALLETS DECODED</span>
+                      <span><b>{earlyBuyers.signaturesScanned}</b> CURVE TX CHECKED</span>
+                      <span><b>{earlyBuyers.transactionsParsed}</b> TX PARSED</span>
+                    </div>
+
+                    {earlyBuyers.buyers.length ? (
+                      <div className="table-wrap early-table">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>WALLET</th>
+                              <th>TOKENS GRABBED</th>
+                              <th>% SUPPLY</th>
+                              <th>AFTER LAUNCH</th>
+                              <th>RECEIPT</th>
+                              <th>TAG</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {earlyBuyers.buyers.slice(0, 12).map((buyer) => (
+                              <tr key={buyer.wallet}>
+                                <td className="mono muted">{buyer.rank}</td>
+                                <td className="mono">
+                                  <a
+                                    href={`https://solscan.io/account/${buyer.wallet}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {short(buyer.wallet)} ↗
+                                  </a>
+                                </td>
+                                <td className="mono">
+                                  {compactNumber(buyer.uiTokenDelta)}
+                                </td>
+                                <td className="mono strong-cell">
+                                  {pct(buyer.supplyPct)}
+                                </td>
+                                <td className="mono age-cell">
+                                  {afterLaunchLabel(buyer.secondsAfterLaunch)}
+                                </td>
+                                <td className="mono">
+                                  <a
+                                    href={`https://solscan.io/tx/${buyer.signature}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {short(buyer.signature, 4, 4)} ↗
+                                  </a>
+                                </td>
+                                <td>
+                                  {buyer.isCreator ? (
+                                    <span className="chip danger">DEV</span>
+                                  ) : (
+                                    <span className="chip">EARLY</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="early-status">
+                        No external positive token deltas decoded in this window yet.
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
 
               <div className="snapshot-layout">
                 <div className="holder-block">
@@ -579,8 +739,8 @@ export function LaunchFeed() {
                   <div className="bottom-line">
                     <span>BOTTOM LINE</span>
                     <p>
-                      No fairy tales: this is a holder-distribution read, not a
-                      magic risk score. Same-bankroll, early buyers and dev
+                      No fairy tales: bags + first buyers are chain-derived reads,
+                      not a magic risk score. Same-bankroll funding links and dev
                       baggage are the next layer.
                     </p>
                   </div>
@@ -593,7 +753,7 @@ export function LaunchFeed() {
 
       <footer className="footer-note">
         <span>TrenchScan v0.2 · built for trenchers · backed by chain data</span>
-        <span>next: who aped first? · same bankroll? · dev baggage</span>
+        <span>who aped first? live · next: same bankroll? · dev baggage</span>
       </footer>
     </main>
   );
