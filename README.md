@@ -27,11 +27,24 @@ Click **SCAN** on a launch to get an evidence-backed distribution read:
 
 The Pump bonding-curve inventory is deliberately excluded from whale concentration math. We do not want protocol-controlled inventory mislabeled as a whale.
 
+### Who aped first?
+
+The scan also replays the earliest Pump bonding-curve transactions it can reach from RPC and extracts wallets whose token balance increased.
+
+For each decoded early wallet TrenchScan shows:
+
+- wallet + explorer receipt
+- tokens grabbed
+- share of supply
+- time after the launch slot
+- creator/dev tag when applicable
+
+The replay is deliberately bounded. If RPC history does not reach the launch boundary, the UI says **PARTIAL WINDOW** instead of pretending those wallets were literally first.
+
 ## What comes next
 
 The differentiating layer:
 
-- **Who aped first?** — early buyers, amounts and timing
 - **Same bankroll?** — wallet funding graph and shared-funder clusters
 - **Dev baggage** — creator history and prior launches
 - **Trench Brief** — plain-English, evidence-backed launch signals
@@ -68,4 +81,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.2 — live launches + evidence-backed holder snapshot`
+`v0.3 — live launches + holder snapshot + who-aped-first replay`
