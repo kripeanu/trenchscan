@@ -124,6 +124,7 @@ export function LaunchFeed() {
     try {
       const params = new URLSearchParams({
         fromSlot: String(launch.slot),
+        launchSig: launch.signature,
         creator: launch.creator,
       });
       const response = await fetch(
