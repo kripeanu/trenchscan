@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TrenchBrand } from "@/components/trench-brand";
-import type { EarlyBuyerScan, FundingTrace, Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
+import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -50,6 +50,16 @@ function beforeLaunchLabel(seconds: number | null) {
   return `${Math.floor(seconds / 3600)}h before`;
 }
 
+function historyDate(blockTime: number | null) {
+  if (blockTime === null) return "time unknown";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(blockTime * 1000));
+}
+
 function totalSupplyPct(amount: number | null, supply: number | null) {
   if (amount === null || supply === null || supply <= 0) return null;
   return (amount / supply) * 100;
@@ -78,6 +88,9 @@ export function LaunchFeed() {
   const [fundingTrace, setFundingTrace] = useState<FundingTrace | null>(null);
   const [fundingState, setFundingState] = useState<SnapshotState>("idle");
   const [fundingError, setFundingError] = useState<string | null>(null);
+  const [devHistory, setDevHistory] = useState<DevHistoryScan | null>(null);
+  const [devState, setDevState] = useState<SnapshotState>("idle");
+  const [devError, setDevError] = useState<string | null>(null);
   const activeScan = useRef<string | null>(null);
 
   useEffect(() => {
@@ -205,6 +218,42 @@ export function LaunchFeed() {
     }
   }
 
+  async function checkDevBaggage() {
+    if (!selected) return;
+
+    const scanId = selected.id;
+    setDevHistory(null);
+    setDevError(null);
+    setDevState("loading");
+
+    try {
+      const params = new URLSearchParams({ before: selected.signature });
+      const response = await fetch(
+        `/api/dev-history/${selected.creator}?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      const payload = (await response.json()) as
+        | DevHistoryScan
+        | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload ? payload.error : "Dev history scan failed",
+        );
+      }
+
+      if (activeScan.current !== scanId) return;
+      setDevHistory(payload);
+      setDevState("ready");
+    } catch (error) {
+      if (activeScan.current !== scanId) return;
+      setDevState("error");
+      setDevError(
+        error instanceof Error ? error.message : "Could not sample dev history",
+      );
+    }
+  }
+
   async function scanLaunch(launch: Launch) {
     activeScan.current = launch.id;
     setSelected(launch);
@@ -217,6 +266,9 @@ export function LaunchFeed() {
     setFundingTrace(null);
     setFundingError(null);
     setFundingState("idle");
+    setDevHistory(null);
+    setDevError(null);
+    setDevState("idle");
     void loadEarlyBuyers(launch);
 
     try {
@@ -523,6 +575,9 @@ export function LaunchFeed() {
                   setFundingTrace(null);
                   setFundingState("idle");
                   setFundingError(null);
+                  setDevHistory(null);
+                  setDevState("idle");
+                  setDevError(null);
                 }}
               >
                 CLOSE ×
@@ -799,6 +854,94 @@ export function LaunchFeed() {
                 )}
               </section>
 
+              <section className="dev-baggage-block">
+                <div className="dev-baggage-head">
+                  <div>
+                    <strong>DEV BAGGAGE</strong>
+                    <span>recent Pump creates by the same creator wallet</span>
+                  </div>
+                  <button
+                    className="trace-button"
+                    type="button"
+                    onClick={() => void checkDevBaggage()}
+                    disabled={devState === "loading"}
+                  >
+                    {devState === "loading"
+                      ? "DIGGING…"
+                      : devState === "ready"
+                        ? "CHECK AGAIN"
+                        : "CHECK DEV →"}
+                  </button>
+                </div>
+
+                {devState === "error" && (
+                  <div className="dev-baggage-status error">
+                    Couldn&apos;t sample the dev wallet. {devError}
+                  </div>
+                )}
+
+                {devHistory && devState === "ready" && (
+                  <>
+                    <div className="dev-baggage-meta">
+                      <span>
+                        <b>{devHistory.priorLaunches.length}</b> PRIOR PUMP CREATES FOUND
+                      </span>
+                      <span>
+                        <b>{devHistory.signaturesSampled}</b> RECENT SIGNATURES SAMPLED
+                      </span>
+                      <span>
+                        <b>{devHistory.transactionsParsed}</b> TX PARSED
+                      </span>
+                    </div>
+
+                    {devHistory.priorLaunches.length ? (
+                      <div className="dev-launch-grid">
+                        {devHistory.priorLaunches.map((launch) => (
+                          <article className="dev-launch-card" key={launch.signature}>
+                            <div>
+                              <strong>${launch.symbol}</strong>
+                              <span>{launch.name}</span>
+                            </div>
+                            <div className="dev-launch-meta">
+                              <a
+                                href={`https://solscan.io/token/${launch.mint}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {short(launch.mint)} ↗
+                              </a>
+                              <span>{historyDate(launch.blockTime)}</span>
+                              {launch.isMayhemMode && (
+                                <em>MAYHEM</em>
+                              )}
+                            </div>
+                            <a
+                              className="dev-receipt"
+                              href={`https://solscan.io/tx/${launch.signature}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              launch receipt ↗
+                            </a>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="dev-baggage-status">
+                        No prior Pump creates found in this recent wallet-history window.
+                        That does <b>not</b> prove this is a first-time dev.
+                      </div>
+                    )}
+
+                    <div className="dev-baggage-caveat">
+                      RECENT WINDOW ONLY: TrenchScan samples the 60 signatures immediately
+                      before this launch. We show what we can prove from that window and
+                      do not label old launches as rugs without separate evidence.
+                    </div>
+                  </>
+                )}
+              </section>
+
               <div className="snapshot-layout">
                 <div className="holder-block">
                   <div className="holder-title">
@@ -904,8 +1047,9 @@ export function LaunchFeed() {
                     <span>BOTTOM LINE</span>
                     <p>
                       No fairy tales: bags + first buyers are chain-derived reads.
-                      The same-bankroll trace only flags shared direct funders —
-                      a clue, not proof of common control. Dev baggage comes next.
+                      Same-bankroll only flags shared direct funders — a clue,
+                      not proof of common control. Dev baggage shows prior creates
+                      from a bounded recent window, not invented rug labels.
                     </p>
                   </div>
                 </aside>
@@ -917,7 +1061,7 @@ export function LaunchFeed() {
 
       <footer className="footer-note">
         <span>TrenchScan v0.2 · built for trenchers · backed by chain data</span>
-        <span>who aped first? live · same bankroll? live · next: dev baggage</span>
+        <span>who aped first? · same bankroll? · dev baggage · receipts included</span>
       </footer>
     </main>
   );

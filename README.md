@@ -55,12 +55,25 @@ The UI shows:
 
 A shared funder is a **clue, not proof of common control**. CEX hot wallets and payout services can fund unrelated traders, so TrenchScan does not call a shared source a cabal by itself.
 
+### Dev baggage
+
+TrenchScan can also sample the creator wallet's recent history immediately before the current launch and look for prior Pump `create_v2` transactions by that same creator.
+
+It shows:
+
+- prior token name + ticker
+- mint
+- launch receipt
+- launch time when RPC provides it
+- Mayhem mode where applicable
+
+The current pass samples the 60 creator-wallet signatures immediately before launch. If no prior creates are found, TrenchScan says exactly that — it does **not** claim the wallet is a first-time dev. It also does not label prior launches as rugs without separate evidence.
+
 ## What comes next
 
 The differentiating layer:
 
-- **Dev baggage** — creator history and prior launches
-- **Trench Brief** — plain-English, evidence-backed launch signals
+- **Trench Brief** — plain-English, evidence-backed launch signals combining the layers above
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
 
@@ -94,4 +107,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.4 — live launches + holder snapshot + who-aped-first + same-bankroll trace`
+`v0.5 — live launches + holder snapshot + who-aped-first + same-bankroll + dev baggage`

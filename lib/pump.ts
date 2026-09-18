@@ -4,6 +4,7 @@ import {
   PublicKey,
   type PartiallyDecodedInstruction,
   type ParsedInstruction,
+  type ParsedTransactionWithMeta,
 } from "@solana/web3.js";
 import type { Launch } from "@/lib/types";
 
@@ -120,17 +121,13 @@ function decodeCreateV2Data(bytes: Uint8Array) {
  * Decodes only fields TrenchScan can prove from Pump's public create_v2 layout.
  * No heuristics or AI are involved in launch detection.
  */
-export async function decodeLaunch(
-  connection: Connection,
+export function decodeLaunchFromTransaction(
+  transaction: ParsedTransactionWithMeta,
   signature: string,
   slot: number,
-): Promise<Launch | null> {
-  const transaction = await connection.getParsedTransaction(signature, {
-    commitment: "confirmed",
-    maxSupportedTransactionVersion: 0,
-  });
-
-  if (!transaction || transaction.meta?.err) return null;
+  seenAt = Date.now(),
+): Launch | null {
+  if (transaction.meta?.err) return null;
 
   const instructions: Array<ParsedInstruction | PartiallyDecodedInstruction> = [
     ...transaction.transaction.message.instructions,
@@ -169,7 +166,7 @@ export async function decodeLaunch(
       id: signature,
       signature,
       slot,
-      seenAt: Date.now(),
+      seenAt,
       name: decoded.name || "Unnamed",
       symbol: decoded.symbol || "???",
       uri: decoded.uri || null,
@@ -187,6 +184,20 @@ export async function decodeLaunch(
   }
 
   return null;
+}
+
+export async function decodeLaunch(
+  connection: Connection,
+  signature: string,
+  slot: number,
+): Promise<Launch | null> {
+  const transaction = await connection.getParsedTransaction(signature, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0,
+  });
+
+  if (!transaction) return null;
+  return decodeLaunchFromTransaction(transaction, signature, slot);
 }
 
 export function looksLikeCreate(logs: readonly string[]) {
