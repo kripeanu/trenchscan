@@ -76,6 +76,7 @@ async function collectCurveSignatures(
   connection: Connection,
   curve: PublicKey,
   launchSlot: number,
+  launchSignature: string,
 ) {
   const collected: ConfirmedSignatureInfo[] = [];
   let before: string | undefined;
@@ -95,7 +96,7 @@ async function collectCurveSignatures(
 
     collected.push(...batch);
 
-    if (batch.some((row) => row.slot <= launchSlot)) {
+    if (batch.some((row) => row.signature === launchSignature)) {
       reachedLaunchBoundary = true;
       break;
     }
@@ -104,9 +105,14 @@ async function collectCurveSignatures(
     if (!before) break;
   }
 
-  const relevant = collected
-    .filter((row) => !row.err && row.slot >= launchSlot)
-    .reverse();
+  const chronological = collected.filter((row) => !row.err).reverse();
+  const launchIndex = chronological.findIndex(
+    (row) => row.signature === launchSignature,
+  );
+  const relevant =
+    launchIndex >= 0
+      ? chronological.slice(launchIndex)
+      : chronological.filter((row) => row.slot >= launchSlot);
 
   return {
     reachedLaunchBoundary,
@@ -153,6 +159,7 @@ export async function buildEarlyBuyerScan(
   connection: Connection,
   mintAddress: string,
   launchSlot: number,
+  launchSignature: string,
   creatorAddress?: string | null,
 ): Promise<EarlyBuyerScan> {
   const mint = new PublicKey(mintAddress);
@@ -162,7 +169,12 @@ export async function buildEarlyBuyerScan(
   const [supplyResponse, launchBlockTime, history] = await Promise.all([
     connection.getTokenSupply(mint, "confirmed"),
     connection.getBlockTime(launchSlot).catch(() => null),
-    collectCurveSignatures(connection, bondingCurve, launchSlot),
+    collectCurveSignatures(
+      connection,
+      bondingCurve,
+      launchSlot,
+      launchSignature,
+    ),
   ]);
 
   const rawSupply = BigInt(supplyResponse.value.amount);
