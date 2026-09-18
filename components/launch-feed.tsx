@@ -65,11 +65,200 @@ function totalSupplyPct(amount: number | null, supply: number | null) {
   return (amount / supply) * 100;
 }
 
-function distributionRead(top10: number | null) {
-  if (top10 === null) return { label: "READING BAGS", tone: "neutral" };
-  if (top10 >= 70) return { label: "TOP-HEAVY", tone: "danger" };
-  if (top10 >= 52) return { label: "WATCH TOP BAGS", tone: "warning" };
-  return { label: "BAGS LOOK OK", tone: "good" };
+type BriefTone = "good" | "neutral" | "warning" | "danger";
+
+type BriefSignal = {
+  label: string;
+  value: string;
+  detail: string;
+  tone: BriefTone;
+};
+
+type TrenchBrief = {
+  label: string;
+  tone: BriefTone;
+  signals: BriefSignal[];
+  bottomLine: string;
+};
+
+function sumKnownPct(values: Array<number | null>) {
+  const known = values.filter((value): value is number => value !== null);
+  if (!known.length) return null;
+  return known.reduce((sum, value) => sum + value, 0);
+}
+
+function buildTrenchBrief(input: {
+  snapshot: TokenSnapshot;
+  earlyBuyers: EarlyBuyerScan | null;
+  fundingTrace: FundingTrace | null;
+  devHistory: DevHistoryScan | null;
+  devBagPct: number | null;
+}): TrenchBrief {
+  const {
+    snapshot,
+    earlyBuyers,
+    fundingTrace,
+    devHistory,
+    devBagPct,
+  } = input;
+  const signals: BriefSignal[] = [];
+
+  const top10 = snapshot.top10ExternalPct;
+  if (top10 !== null) {
+    signals.push({
+      label: "TOP BAGS",
+      value: pct(top10),
+      detail:
+        top10 >= 70
+          ? "Top-heavy. A lot of the external float sits in a few hands."
+          : top10 >= 52
+            ? "Not instantly cooked, but the top bags deserve attention."
+            : "This holder read is not screaming whale wall.",
+      tone: top10 >= 70 ? "danger" : top10 >= 52 ? "warning" : "good",
+    });
+  }
+
+  const earlyConcentration = earlyBuyers
+    ? sumKnownPct(
+        earlyBuyers.buyers.slice(0, 10).map((buyer) => buyer.supplyPct),
+      )
+    : null;
+  if (earlyBuyers && earlyConcentration !== null) {
+    signals.push({
+      label: earlyBuyers.historyComplete ? "EARLY CREW" : "EARLY WINDOW",
+      value: pct(earlyConcentration),
+      detail: earlyBuyers.historyComplete
+        ? "Combined supply grabbed by the first decoded external wallets."
+        : "Combined supply in our sampled early window; launch boundary was not reached.",
+      tone:
+        earlyConcentration >= 40
+          ? "danger"
+          : earlyConcentration >= 25
+            ? "warning"
+            : "neutral",
+    });
+  }
+
+  const fastBuyers =
+    earlyBuyers?.buyers.filter(
+      (buyer) =>
+        buyer.secondsAfterLaunch !== null && buyer.secondsAfterLaunch <= 30,
+    ).length ?? 0;
+  if (fastBuyers > 0) {
+    signals.push({
+      label: "FAST FRESHIES",
+      value: String(fastBuyers),
+      detail: `${fastBuyers} decoded wallet${fastBuyers === 1 ? "" : "s"} landed inside 30s of launch.`,
+      tone: fastBuyers >= 5 ? "warning" : "neutral",
+    });
+  }
+
+  const largestCluster = fundingTrace?.clusters[0] ?? null;
+  if (fundingTrace) {
+    signals.push(
+      largestCluster
+        ? {
+            label: "SAME BANKROLL?",
+            value: `${largestCluster.memberCount} WALLETS`,
+            detail:
+              "They share the same direct pre-launch SOL funder. Clue, not proof of common control.",
+            tone: largestCluster.memberCount >= 4 ? "danger" : "warning",
+          }
+        : {
+            label: "SAME BANKROLL?",
+            value: "NO DIRECT CLUSTER",
+            detail:
+              "No shared direct SOL funder found in the wallets this pass could trace.",
+            tone: "good",
+          },
+    );
+  } else {
+    signals.push({
+      label: "SAME BANKROLL?",
+      value: "NOT CHECKED",
+      detail: "Run the funding trace for the relationship layer.",
+      tone: "neutral",
+    });
+  }
+
+  if (devHistory) {
+    const count = devHistory.priorLaunches.length;
+    signals.push({
+      label: "DEV BAGGAGE",
+      value: count ? `${count} PRIOR CREATE${count === 1 ? "" : "S"}` : "NONE FOUND",
+      detail: count
+        ? "Prior Pump creates by this creator in the recent sampled wallet window."
+        : "No prior Pump creates found in the recent 60-signature window; not proof the dev is new.",
+      tone: count >= 4 ? "warning" : count > 0 ? "neutral" : "good",
+    });
+  } else {
+    signals.push({
+      label: "DEV BAGGAGE",
+      value: "NOT CHECKED",
+      detail: "Sample the creator wallet before calling the dev fresh.",
+      tone: "neutral",
+    });
+  }
+
+  if (devBagPct !== null) {
+    signals.push({
+      label: "DEV BAG",
+      value: pct(devBagPct),
+      detail:
+        devBagPct >= 10
+          ? "Creator still sits on a chunky share of total supply."
+          : devBagPct >= 5
+            ? "Creator bag is worth watching."
+            : "Creator is visible in the sampled holders, but the bag is relatively light.",
+      tone: devBagPct >= 10 ? "danger" : devBagPct >= 5 ? "warning" : "good",
+    });
+  }
+
+  const dangerCount = signals.filter((signal) => signal.tone === "danger").length;
+  const warningCount = signals.filter((signal) => signal.tone === "warning").length;
+  const relationshipChecksLoaded = fundingTrace !== null && devHistory !== null;
+
+  let label = "MORE RECEIPTS NEEDED";
+  let tone: BriefTone = "neutral";
+
+  if (dangerCount >= 2) {
+    label = "MULTIPLE RED FLAGS";
+    tone = "danger";
+  } else if (dangerCount === 1 || warningCount >= 2) {
+    label = "KEEP BOTH EYES OPEN";
+    tone = "warning";
+  } else if (relationshipChecksLoaded) {
+    label = "NO BIG FLAG YET";
+    tone = "good";
+  }
+
+  const bottomParts: string[] = [];
+  if (top10 !== null) bottomParts.push(`Top 10 external bags sit at ${pct(top10)}.`);
+  if (earlyConcentration !== null) {
+    bottomParts.push(
+      `Decoded early wallets account for ${pct(earlyConcentration)} of supply in this read.`,
+    );
+  }
+  if (largestCluster) {
+    bottomParts.push(
+      `${largestCluster.memberCount} early wallets share one direct funder.`,
+    );
+  }
+  if (devHistory?.priorLaunches.length) {
+    bottomParts.push(
+      `Dev has ${devHistory.priorLaunches.length} prior Pump create${devHistory.priorLaunches.length === 1 ? "" : "s"} in the sampled window.`,
+    );
+  }
+  if (!relationshipChecksLoaded) {
+    bottomParts.push("Run Same Bankroll + Dev Baggage for the fuller read.");
+  }
+
+  return {
+    label,
+    tone,
+    signals,
+    bottomLine: bottomParts.join(" "),
+  };
 }
 
 type SnapshotState = "idle" | "loading" | "ready" | "error";
@@ -305,9 +494,15 @@ export function LaunchFeed() {
     snapshot && devHolder
       ? totalSupplyPct(devHolder.uiAmount, snapshot.uiSupply)
       : null;
-  const read = snapshot
-    ? distributionRead(snapshot.top10ExternalPct)
-    : distributionRead(null);
+  const trenchBrief = snapshot
+    ? buildTrenchBrief({
+        snapshot,
+        earlyBuyers,
+        fundingTrace,
+        devHistory,
+        devBagPct,
+      })
+    : null;
 
   return (
     <main className="terminal-shell">
@@ -1000,57 +1195,33 @@ export function LaunchFeed() {
 
                 <aside className="trench-take">
                   <div className="take-head">
-                    <span>TRENCH TAKE</span>
-                    <em data-tone={read.tone}>{read.label}</em>
+                    <span>TRENCH BRIEF</span>
+                    {trenchBrief && (
+                      <em data-tone={trenchBrief.tone}>{trenchBrief.label}</em>
+                    )}
                   </div>
 
                   <div className="take-list">
-                    <div>
-                      <i />
-                      <span>
-                        <b>Top 10 bags: {pct(snapshot.top10ExternalPct)}</b>
-                        <small>
-                          {snapshot.top10ExternalPct !== null && snapshot.top10ExternalPct >= 70
-                            ? "That is top-heavy. Keep both eyes open."
-                            : snapshot.top10ExternalPct !== null && snapshot.top10ExternalPct >= 52
-                              ? "Not instantly cooked, but the top bags matter."
-                              : "Distribution is not screaming whale wall from this read."}
-                        </small>
-                      </span>
-                    </div>
-                    <div>
-                      <i />
-                      <span>
-                        <b>{pct(snapshot.externalFloatPct)} in the wild</b>
-                        <small>External float after removing the Pump curve stash.</small>
-                      </span>
-                    </div>
-                    <div>
-                      <i />
-                      <span>
-                        <b>Curve stash: {pct(snapshot.curveInventoryPct)}</b>
-                        <small>We exclude this before calling anything a whale.</small>
-                      </span>
-                    </div>
-                    <div>
-                      <i />
-                      <span>
-                        <b>
-                          Dev bag: {devBagPct === null ? "not in sampled top 20" : pct(devBagPct)}
-                        </b>
-                        <small>Creator wallet is explicitly tagged when it shows up.</small>
-                      </span>
-                    </div>
+                    {trenchBrief?.signals.map((signal) => (
+                      <div key={signal.label} data-tone={signal.tone}>
+                        <i data-tone={signal.tone} />
+                        <span>
+                          <b>
+                            {signal.label}: <strong>{signal.value}</strong>
+                          </b>
+                          <small>{signal.detail}</small>
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="bottom-line">
                     <span>BOTTOM LINE</span>
-                    <p>
-                      No fairy tales: bags + first buyers are chain-derived reads.
-                      Same-bankroll only flags shared direct funders — a clue,
-                      not proof of common control. Dev baggage shows prior creates
-                      from a bounded recent window, not invented rug labels.
-                    </p>
+                    <p>{trenchBrief?.bottomLine}</p>
+                    <small>
+                      Evidence summary, not a buy/sell call. Every relationship
+                      above stays one click away from its receipt.
+                    </small>
                   </div>
                 </aside>
               </div>
@@ -1061,7 +1232,7 @@ export function LaunchFeed() {
 
       <footer className="footer-note">
         <span>TrenchScan v0.2 · built for trenchers · backed by chain data</span>
-        <span>who aped first? · same bankroll? · dev baggage · receipts included</span>
+        <span>trench brief live · every signal stays receipt-backed</span>
       </footer>
     </main>
   );
