@@ -176,6 +176,8 @@ export async function decodeLaunch(
       mint: instruction.accounts[0].toBase58(),
       creator: decoded.creator.toBase58(),
       payer: instruction.accounts[5].toBase58(),
+      bondingCurve: instruction.accounts[2].toBase58(),
+      associatedBondingCurve: instruction.accounts[3].toBase58(),
       source: "pump.fun",
       isMayhemMode: decoded.isMayhemMode,
       // Pump's trailing optional holder-reward field is intentionally left

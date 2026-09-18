@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Launch, StreamStatus } from "@/lib/types";
+import type { Launch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -24,10 +24,28 @@ function statusCopy(status: StreamStatus) {
   return "CONNECTING";
 }
 
+function pct(value: number | null) {
+  return value === null ? "—" : `${value.toFixed(2)}%`;
+}
+
+function compactNumber(value: number | null) {
+  if (value === null) return "—";
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+type SnapshotState = "idle" | "loading" | "ready" | "error";
+
 export function LaunchFeed() {
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [status, setStatus] = useState<StreamStatus>({ state: "connecting" });
   const [now, setNow] = useState(Date.now());
+  const [selected, setSelected] = useState<Launch | null>(null);
+  const [snapshot, setSnapshot] = useState<TokenSnapshot | null>(null);
+  const [snapshotState, setSnapshotState] = useState<SnapshotState>("idle");
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -78,6 +96,34 @@ export function LaunchFeed() {
     if (!launches.length) return "—";
     return ageLabel(launches[launches.length - 1].seenAt, now);
   }, [launches, now]);
+
+  async function scanLaunch(launch: Launch) {
+    setSelected(launch);
+    setSnapshot(null);
+    setSnapshotError(null);
+    setSnapshotState("loading");
+
+    try {
+      const response = await fetch(`/api/snapshot/${launch.mint}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as
+        | TokenSnapshot
+        | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error("error" in payload ? payload.error : "Snapshot failed");
+      }
+
+      setSnapshot(payload);
+      setSnapshotState("ready");
+    } catch (error) {
+      setSnapshotState("error");
+      setSnapshotError(
+        error instanceof Error ? error.message : "Could not scan token",
+      );
+    }
+  }
 
   return (
     <main className="terminal-shell">
@@ -142,11 +188,12 @@ export function LaunchFeed() {
                 <th>CREATOR</th>
                 <th>MAYHEM</th>
                 <th>TX</th>
+                <th>SCAN</th>
               </tr>
             </thead>
             <tbody>
               {launches.map((launch) => (
-                <tr key={launch.id}>
+                <tr key={launch.id} data-selected={selected?.id === launch.id}>
                   <td className="mono muted">{ageLabel(launch.seenAt, now)}</td>
                   <td>
                     <div className="token-cell">
@@ -190,6 +237,17 @@ export function LaunchFeed() {
                       {short(launch.signature, 4, 4)} ↗
                     </a>
                   </td>
+                  <td>
+                    <button
+                      className="scan-button"
+                      type="button"
+                      onClick={() => void scanLaunch(launch)}
+                    >
+                      {selected?.id === launch.id && snapshotState === "loading"
+                        ? "READING…"
+                        : "SCAN →"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -206,8 +264,131 @@ export function LaunchFeed() {
         </div>
       </section>
 
+      {selected && (
+        <section className="scan-panel" aria-live="polite">
+          <div className="scan-heading">
+            <div>
+              <span className="eyebrow">TRENCH SNAPSHOT</span>
+              <h2>
+                ${selected.symbol} <span>{selected.name}</span>
+              </h2>
+            </div>
+            <button
+              className="close-button"
+              type="button"
+              onClick={() => {
+                setSelected(null);
+                setSnapshot(null);
+                setSnapshotState("idle");
+              }}
+            >
+              CLOSE ×
+            </button>
+          </div>
+
+          {snapshotState === "loading" && (
+            <div className="scan-loading">Reading token accounts from Solana…</div>
+          )}
+
+          {snapshotState === "error" && (
+            <div className="scan-error">
+              RPC could not build this snapshot. {snapshotError}
+            </div>
+          )}
+
+          {snapshot && snapshotState === "ready" && (
+            <>
+              <div className="signal-grid">
+                <div className="signal-card">
+                  <span>TOP HOLDER / EX-CURVE</span>
+                  <strong>{pct(snapshot.top1ExternalPct)}</strong>
+                </div>
+                <div className="signal-card">
+                  <span>TOP 10 / EX-CURVE</span>
+                  <strong>{pct(snapshot.top10ExternalPct)}</strong>
+                </div>
+                <div className="signal-card">
+                  <span>EXTERNAL FLOAT</span>
+                  <strong>{pct(snapshot.externalFloatPct)}</strong>
+                </div>
+                <div className="signal-card">
+                  <span>CURVE INVENTORY</span>
+                  <strong>{pct(snapshot.curveInventoryPct)}</strong>
+                </div>
+              </div>
+
+              <div className="evidence-bar">
+                <span>
+                  SUPPLY <b>{compactNumber(snapshot.uiSupply)}</b>
+                </span>
+                <a
+                  href={`https://solscan.io/account/${snapshot.bondingCurve}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  BONDING CURVE {short(snapshot.bondingCurve)} ↗
+                </a>
+                <span>sampled {ageLabel(snapshot.sampledAt, now)} ago</span>
+              </div>
+
+              <div className="holder-block">
+                <div className="holder-title">
+                  TOP EXTERNAL TOKEN ACCOUNTS
+                  <span>curve inventory excluded from concentration</span>
+                </div>
+                <div className="table-wrap compact-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>OWNER</th>
+                        <th>TOKEN ACCOUNT</th>
+                        <th>AMOUNT</th>
+                        <th>SHARE OF EXTERNAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshot.holders.slice(0, 10).map((holder) => (
+                        <tr key={holder.tokenAccount}>
+                          <td className="mono muted">{holder.rank}</td>
+                          <td className="mono">
+                            {holder.owner ? (
+                              <a
+                                href={`https://solscan.io/account/${holder.owner}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {short(holder.owner)} ↗
+                              </a>
+                            ) : (
+                              "unknown"
+                            )}
+                            {holder.owner === selected.creator && (
+                              <span className="chip danger">DEV</span>
+                            )}
+                          </td>
+                          <td className="mono muted">
+                            {short(holder.tokenAccount)}
+                          </td>
+                          <td className="mono">
+                            {compactNumber(holder.uiAmount)}
+                          </td>
+                          <td className="mono strong-cell">
+                            {pct(holder.shareOfExternalPct)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
       <footer className="footer-note">
-        <span>v0.1 / raw launch feed</span>
+        <span>v0.2 / live launch + holder snapshot</span>
         <span>next: dev history · early buyers · wallet clusters</span>
       </footer>
     </main>
