@@ -42,6 +42,32 @@ export type TokenSnapshot = {
   holders: HolderRow[];
 };
 
+export type EarlyBuyerRow = {
+  rank: number;
+  wallet: string;
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+  secondsAfterLaunch: number | null;
+  rawTokenDelta: string;
+  uiTokenDelta: number | null;
+  supplyPct: number | null;
+  isCreator: boolean;
+};
+
+export type EarlyBuyerScan = {
+  mint: string;
+  bondingCurve: string;
+  launchSlot: number;
+  launchBlockTime: number | null;
+  sampledAt: number;
+  historyComplete: boolean;
+  signaturesScanned: number;
+  relevantSignaturesSeen: number;
+  transactionsParsed: number;
+  buyers: EarlyBuyerRow[];
+};
+
 export type StreamStatus = {
   state: "connecting" | "live" | "error";
   message?: string;
