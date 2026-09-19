@@ -1223,3 +1223,52 @@ tbody tr[data-selected="true"] {
     gap: 5px;
   }
 }
+
+
+.take-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.take-actions button {
+  min-height: 29px;
+  padding: 0 9px;
+  border: 1px solid rgba(88, 207, 255, 0.24);
+  background: rgba(88, 207, 255, 0.025);
+  color: #86bed0;
+  cursor: pointer;
+  font: 750 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.07em;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.take-actions button:first-child {
+  border-color: rgba(38, 243, 189, 0.28);
+  background: rgba(38, 243, 189, 0.025);
+  color: var(--acid);
+}
+
+.take-actions button:hover {
+  border-color: var(--cyan);
+  background: rgba(88, 207, 255, 0.06);
+  color: var(--cyan);
+}
+
+.take-actions button:first-child:hover {
+  border-color: var(--acid);
+  background: rgba(38, 243, 189, 0.06);
+  color: var(--acid);
+}
+
+@media (max-width: 520px) {
+  .take-actions {
+    flex-direction: column;
+  }
+
+  .take-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+}
