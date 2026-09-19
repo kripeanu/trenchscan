@@ -268,3 +268,10 @@ export function decodeStonkFunLaunchFromTransaction(
 
   return null;
 }
+
+
+export function looksLikeStonkFunInitialize(logs: readonly string[]) {
+  return logs.some((line) =>
+    /Instruction:\s*Initialize(?:V2|WithToken2022)\b/i.test(line),
+  );
+}
