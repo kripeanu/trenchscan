@@ -1272,3 +1272,153 @@ tbody tr[data-selected="true"] {
     justify-content: center;
   }
 }
+
+
+.funding-map {
+  border-top: 1px solid rgba(88, 207, 255, 0.12);
+  border-bottom: 1px solid var(--line-soft);
+  background:
+    radial-gradient(circle at 18% 50%, rgba(155, 125, 255, 0.045), transparent 25rem),
+    radial-gradient(circle at 82% 50%, rgba(38, 243, 189, 0.035), transparent 24rem),
+    rgba(4, 12, 12, 0.52);
+}
+
+.funding-map-head {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(88, 207, 255, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.funding-map-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.funding-map-head strong {
+  color: #dce9e5;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+}
+
+.funding-map-head span,
+.funding-map-head small {
+  color: #547178;
+  font-size: 7px;
+}
+
+.funding-map-head small {
+  color: #668b94;
+}
+
+.funding-map-canvas {
+  width: 100%;
+  overflow-x: auto;
+  padding: 4px 12px 0;
+}
+
+.funding-map-canvas svg {
+  width: 100%;
+  min-width: 780px;
+  height: auto;
+  display: block;
+}
+
+.funding-col-label {
+  fill: #4e6e70;
+  font: 700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 1.2px;
+}
+
+.funding-edge {
+  stroke-width: 1.6;
+  opacity: 0.72;
+}
+
+.funding-edge-direct {
+  stroke: rgba(38, 243, 189, 0.42);
+}
+
+.funding-edge-upstream {
+  stroke: rgba(155, 125, 255, 0.5);
+  stroke-dasharray: 5 4;
+}
+
+.funding-node rect {
+  fill: #07100d;
+  stroke-width: 1.25;
+  transition: stroke 120ms ease, fill 120ms ease;
+}
+
+.funding-node-buyer rect {
+  stroke: rgba(38, 243, 189, 0.45);
+}
+
+.funding-node-funder rect {
+  stroke: rgba(88, 207, 255, 0.42);
+}
+
+.funding-node-upstream rect {
+  stroke: rgba(155, 125, 255, 0.5);
+}
+
+.funding-node:hover rect {
+  fill: #0a1814;
+  stroke-width: 1.8;
+}
+
+.funding-node-type,
+.funding-node-address {
+  pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.funding-node-type {
+  fill: #5b7970;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.funding-node-address {
+  fill: #b6c9c2;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.funding-node-upstream .funding-node-address {
+  fill: #b6a8ff;
+}
+
+.funding-node-funder .funding-node-address {
+  fill: #91c8d8;
+}
+
+.funding-node-buyer .funding-node-address {
+  fill: #9ee8cf;
+}
+
+.funding-map-note {
+  padding: 9px 20px 11px;
+  border-top: 1px solid rgba(88, 207, 255, 0.08);
+  color: #596f6a;
+  font: 6.8px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+  .funding-map-head,
+  .funding-map-head > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .funding-map-head {
+    gap: 6px;
+  }
+}
