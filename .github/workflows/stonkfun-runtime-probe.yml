@@ -1,0 +1,118 @@
+name: StonkFun Mainnet Probe
+
+on:
+  push:
+    branches:
+      - feat/stonkfun-mainnet-replay
+  workflow_dispatch:
+
+concurrency:
+  group: stonkfun-mainnet-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Start production server
+        run: |
+          npm run start -- -p 3000 > /tmp/trenchscan-server.log 2>&1 &
+          echo $! > /tmp/trenchscan.pid
+
+          for attempt in $(seq 1 45); do
+            if curl --silent --show-error --fail --max-time 10               http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s /tmp/health.json
+          jq -e '.ok == true' /tmp/health.json
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Find a verified recent StonkFun launch
+        id: probe
+        continue-on-error: true
+        run: |
+          code=$(curl --silent --show-error --max-time 240             -o /tmp/stonkfun.json             -w "%{http_code}"             http://127.0.0.1:3000/api/stonkfun/replay || true)
+
+          echo "StonkFun replay discovery -> HTTP $code"
+
+          if [ "$code" != "200" ]; then
+            cat /tmp/stonkfun.json 2>/dev/null || true
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          jq -e '
+            .launch.source == "stonkfun.xyz" and
+            .launch.signature and
+            .launch.mint and
+            .launch.creator and
+            .launch.platformConfig and
+            .launch.poolState and
+            .launch.quoteMint
+          ' /tmp/stonkfun.json > /dev/null
+
+          echo "=== VERIFIED STONKFUN LAUNCH ==="
+          jq '{
+            signature: .launch.signature,
+            slot: .launch.slot,
+            variant: .launch.variant,
+            rewardMode: .launch.rewardMode,
+            symbol: .launch.symbol,
+            name: .launch.name,
+            mint: .launch.mint,
+            creator: .launch.creator,
+            platformConfig: .launch.platformConfig,
+            poolState: .launch.poolState,
+            quoteMint: .launch.quoteMint
+          }' /tmp/stonkfun.json
+
+          echo "signature=$(jq -r '.launch.signature' /tmp/stonkfun.json)" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Reproduce the exact StonkFun launch
+        if: steps.probe.outputs.found == 'true'
+        run: |
+          signature="${{ steps.probe.outputs.signature }}"
+
+          code=$(curl --silent --show-error --max-time 120             -o /tmp/stonkfun-exact.json             -w "%{http_code}"             "http://127.0.0.1:3000/api/stonkfun/replay?signature=$signature" || true)
+
+          echo "Exact StonkFun replay -> HTTP $code"
+          test "$code" = "200"
+          jq -e --arg signature "$signature"             '.launch.signature == $signature and .launch.source == "stonkfun.xyz"'             /tmp/stonkfun-exact.json > /dev/null
+
+          echo "Exact-signature StonkFun replay reproduced the discovered launch."
+
+      - name: Probe summary
+        if: always()
+        run: |
+          echo "=== STONKFUN PROBE SUMMARY ==="
+          if [ "${{ steps.probe.outputs.found }}" = "true" ]; then
+            echo "RESULT: verified StonkFun LaunchLab initialize found and decoded."
+          else
+            echo "RESULT: bounded public-RPC search did not verify a launch this run."
+            echo "This does not classify generic LaunchLab traffic as StonkFun."
+          fi
+          echo "=== SERVER LOG TAIL ==="
+          tail -n 160 /tmp/trenchscan-server.log || true

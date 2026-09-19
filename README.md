@@ -221,6 +221,8 @@ The adapter:
 
 This is intentionally **decoder groundwork, not live multi-launchpad support yet**. The current UI still runs Pump-specific holder / curve / early-buyer semantics, so StonkFun will not be wired into the shared feed until those source-specific assumptions are split cleanly.
 
+`GET /api/stonkfun/replay` now performs a bounded mainnet discovery pass over StonkFun's two platform configs and only returns a transaction if the LaunchLab initialize discriminator also verifies. Passing `?signature=<tx>` replays one exact candidate.
+
 That keeps the expansion honest: matching generic LaunchLab traffic is not enough to call something StonkFun.
 
 ## What comes next
@@ -266,4 +268,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.21 — StonkFun / LaunchLab decoder groundwork`
+`v0.22 — StonkFun mainnet replay probe`
