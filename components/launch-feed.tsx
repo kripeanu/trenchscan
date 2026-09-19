@@ -25,6 +25,7 @@ import {
 import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, ReplayLaunch, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
+const LOCAL_LAUNCH_CACHE_KEY = "trenchscan:launches:v31";
 
 // This exact Pump launch was caught by TrenchScan's GitHub-hosted mainnet
 // runtime verification, then reproduced through exact-signature replay.
@@ -171,6 +172,48 @@ export function LaunchFeed() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_LAUNCH_CACHE_KEY);
+      if (!raw) return;
+
+      const cached = JSON.parse(raw) as LaunchEnvelope[];
+      if (!Array.isArray(cached)) return;
+
+      setLaunches((current) => {
+        let next = current;
+        for (const launch of cached.slice(0, MAX_ROWS)) {
+          if (
+            !launch ||
+            typeof launch.id !== "string" ||
+            typeof launch.signature !== "string" ||
+            typeof launch.seenAt !== "number"
+          ) {
+            continue;
+          }
+
+          next = mergeLaunchEnvelopes(next, launch, MAX_ROWS);
+        }
+        return next;
+      });
+    } catch {
+      // A corrupt browser cache should never block the live chain feed.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!launches.length) return;
+
+    try {
+      window.localStorage.setItem(
+        LOCAL_LAUNCH_CACHE_KEY,
+        JSON.stringify(launches.slice(0, MAX_ROWS)),
+      );
+    } catch {
+      // Private browsing / storage limits should not affect live mode.
+    }
+  }, [launches]);
 
   useEffect(() => {
     const source = new EventSource("/api/stream");
