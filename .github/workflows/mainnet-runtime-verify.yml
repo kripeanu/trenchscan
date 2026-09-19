@@ -1,0 +1,178 @@
+name: Mainnet Runtime Verify
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/mainnet-runtime-verify
+
+jobs:
+  verify-mainnet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Start production server
+        run: |
+          npm run start -- -p 3000 > /tmp/trenchscan-server.log 2>&1 &
+          echo $! > /tmp/trenchscan.pid
+
+          for attempt in $(seq 1 45); do
+            if curl --silent --show-error --fail --max-time 10               http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s /tmp/health.json
+          echo "=== HEALTH ==="
+          cat /tmp/health.json | jq .
+          jq -e '.ok == true and .rpc.slot > 0 and .rpc.blockHeight > 0' /tmp/health.json
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Find and decode a real Pump launch
+        run: |
+          success=0
+
+          for attempt in $(seq 1 5); do
+            code=$(curl --silent --show-error --max-time 90               -o /tmp/replay.json               -w "%{http_code}"               http://127.0.0.1:3000/api/replay || true)
+
+            echo "Replay attempt $attempt -> HTTP $code"
+
+            if [ "$code" = "200" ] && jq -e               '.launch.signature and .launch.mint and .launch.creator and .launch.symbol and .launch.bondingCurve'               /tmp/replay.json > /dev/null; then
+              success=1
+              break
+            fi
+
+            cat /tmp/replay.json 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+
+          if [ "$success" != "1" ]; then
+            echo "Could not decode a recent real Pump create_v2 launch."
+            echo "=== SERVER LOG ==="
+            tail -n 200 /tmp/trenchscan-server.log || true
+            exit 1
+          fi
+
+          echo "=== REAL LAUNCH ==="
+          jq '{
+            signature: .launch.signature,
+            slot: .launch.slot,
+            symbol: .launch.symbol,
+            name: .launch.name,
+            mint: .launch.mint,
+            creator: .launch.creator,
+            bondingCurve: .launch.bondingCurve,
+            associatedBondingCurve: .launch.associatedBondingCurve
+          }' /tmp/replay.json
+
+          signature=$(jq -r '.launch.signature' /tmp/replay.json)
+          echo "LAUNCH_SIGNATURE=$signature" >> "$GITHUB_ENV"
+
+      - name: Run the full receipt-backed analysis
+        run: |
+          success=0
+
+          for attempt in $(seq 1 3); do
+            code=$(curl --silent --show-error --max-time 180               -o /tmp/analysis.json               -w "%{http_code}"               "http://127.0.0.1:3000/api/analyze/$LAUNCH_SIGNATURE" || true)
+
+            echo "Analysis attempt $attempt -> HTTP $code"
+
+            if [ "$code" = "200" ] && jq -e               '.launch.signature == env.LAUNCH_SIGNATURE and
+               .snapshot.mint == .launch.mint and
+               .trenchBrief.label and
+               .proofPack.schemaVersion >= 2 and
+               (.timingsMs.total >= 0)'               /tmp/analysis.json > /dev/null; then
+              success=1
+              break
+            fi
+
+            cat /tmp/analysis.json 2>/dev/null || true
+            sleep $((attempt * 7))
+          done
+
+          if [ "$success" != "1" ]; then
+            echo "Full analysis did not complete."
+            echo "=== SERVER LOG ==="
+            tail -n 250 /tmp/trenchscan-server.log || true
+            exit 1
+          fi
+
+          echo "=== ANALYSIS SUMMARY ==="
+          jq '{
+            launch: {
+              signature: .launch.signature,
+              symbol: .launch.symbol,
+              mint: .launch.mint,
+              creator: .launch.creator
+            },
+            holderSnapshot: {
+              top1ExternalPct: .snapshot.top1ExternalPct,
+              top10ExternalPct: .snapshot.top10ExternalPct,
+              externalFloatPct: .snapshot.externalFloatPct,
+              curveInventoryPct: .snapshot.curveInventoryPct
+            },
+            earlyBuyers: {
+              available: (.earlyBuyers != null),
+              historyComplete: (.earlyBuyers.historyComplete // null),
+              count: (.earlyBuyers.buyers | length? // 0)
+            },
+            earlyRetention: {
+              available: (.earlyRetention != null),
+              checked: (.earlyRetention.walletsChecked // 0)
+            },
+            fundingTrace: {
+              available: (.fundingTrace != null),
+              walletsChecked: (.fundingTrace.walletsChecked // 0),
+              directClusters: (.fundingTrace.clusters | length? // 0),
+              upstreamClusters: (.fundingTrace.upstreamClusters | length? // 0)
+            },
+            devHistory: {
+              available: (.devHistory != null),
+              priorCreates: (.devHistory.priorLaunches | length? // 0)
+            },
+            trenchBrief: {
+              label: .trenchBrief.label,
+              tone: .trenchBrief.tone,
+              signals: [.trenchBrief.signals[] | {label, value, tone}]
+            },
+            warnings: .warnings,
+            timingsMs: .timingsMs
+          }' /tmp/analysis.json
+
+      - name: Verify replay reproducibility
+        run: |
+          code=$(curl --silent --show-error --max-time 90             -o /tmp/replay-exact.json             -w "%{http_code}"             "http://127.0.0.1:3000/api/replay?signature=$LAUNCH_SIGNATURE" || true)
+
+          echo "Exact replay -> HTTP $code"
+          test "$code" = "200"
+
+          jq -e             '.launch.signature == env.LAUNCH_SIGNATURE and
+             .launch.mint and
+             .launch.creator'             /tmp/replay-exact.json > /dev/null
+
+          echo "Exact-signature replay reproduced the same launch."
+
+      - name: Print server diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== SERVER LOG ==="
+          tail -n 300 /tmp/trenchscan-server.log || true
