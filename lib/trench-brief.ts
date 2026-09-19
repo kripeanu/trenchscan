@@ -1,3 +1,4 @@
+import { buildDevCadence } from "./dev-cadence";
 import { buildSameSlotClusters } from "./early-timing";
 import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, TokenSnapshot } from "./types";
 
@@ -151,6 +152,29 @@ export function buildTrenchBrief(input: {
     });
   }
 
+  const devCadence = buildDevCadence(
+    devHistory,
+    earlyBuyers?.launchBlockTime ?? null,
+  );
+
+  if (devCadence && devCadence.within24h > 0) {
+    signals.push({
+      label: "DEV CADENCE",
+      value:
+        devCadence.within1h >= 2
+          ? `${devCadence.within1h} IN 1H`
+          : `${devCadence.within24h} IN 24H`,
+      detail:
+        devCadence.within1h >= 2
+          ? `Creator has ${devCadence.within1h} prior creates inside one hour of this launch in the sampled window.`
+          : `Creator has ${devCadence.within24h} prior create${devCadence.within24h === 1 ? "" : "s"} inside 24h of this launch in the sampled window.`,
+      tone:
+        devCadence.within1h >= 3 || devCadence.within24h >= 5
+          ? "warning"
+          : "neutral",
+    });
+  }
+
   if (devHistory) {
     const count = devHistory.priorLaunches.length;
     signals.push({
@@ -206,6 +230,9 @@ export function buildTrenchBrief(input: {
   if (largestCluster) bottom.push(`${largestCluster.memberCount} early wallets share one direct funder.`);
   if (freshWallets) bottom.push(`${freshWallets} early wallets look fresh inside the sampled pre-buy history.`);
   if (largestUpstreamCluster) bottom.push(`${largestUpstreamCluster.buyerCount} early wallets connect one hop deeper through ${largestUpstreamCluster.intermediaryCount} direct funders.`);
+  if (devCadence && devCadence.within24h > 0) {
+    bottom.push(`Dev has ${devCadence.within24h} prior create${devCadence.within24h === 1 ? "" : "s"} inside 24h of this launch in the sampled window.`);
+  }
   if (devHistory?.priorLaunches.length) bottom.push(`Dev has ${devHistory.priorLaunches.length} prior Pump create${devHistory.priorLaunches.length === 1 ? "" : "s"} in the sampled window.`);
   if (!complete) bottom.push("Run Same Bankroll + Dev Baggage for the fuller read.");
 
