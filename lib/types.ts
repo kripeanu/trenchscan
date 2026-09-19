@@ -25,6 +25,27 @@ export type HolderRow = {
   shareOfExternalPct: number | null;
 };
 
+export type ExcludedInventoryRow = {
+  label: string;
+  tokenAccount: string;
+  rawAmount: string;
+  supplyPct: number | null;
+};
+
+export type TokenDistributionSnapshot = {
+  mint: string;
+  sampledAt: number;
+  decimals: number;
+  rawSupply: string;
+  uiSupply: number | null;
+  excludedInventory: ExcludedInventoryRow[];
+  rawExternalSupply: string;
+  externalFloatPct: number | null;
+  top1ExternalPct: number | null;
+  top10ExternalPct: number | null;
+  holders: HolderRow[];
+};
+
 export type TokenSnapshot = {
   mint: string;
   sampledAt: number;
