@@ -32,7 +32,14 @@ export function buildFeedQualification(input: {
 }): FeedQualification {
   const { evidence, devLaunchesInWindow, replay = false } = input;
 
-  if (!replay && devLaunchesInWindow >= FEED_QUALIFICATION_RULES.devFloodLaunches) {
+  if (replay) {
+    return {
+      state: "qualified",
+      reasons: ["verified replay receipt"],
+    };
+  }
+
+  if (devLaunchesInWindow >= FEED_QUALIFICATION_RULES.devFloodLaunches) {
     return {
       state: "dev-flood",
       reasons: [
