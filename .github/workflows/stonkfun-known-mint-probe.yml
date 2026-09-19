@@ -98,37 +98,53 @@ jobs:
 
           echo "signature=$signature" >> "$GITHUB_OUTPUT"
 
-      - name: Locate S500 creation from mint history fallback
+      - name: Locate StonkFun creation from known mint fallback
         id: locate
         if: steps.referenced.outcome != 'success'
         run: |
-          # Historical S500 mint is only a locator. TrenchScan still requires
-          # LaunchLab program + initialize discriminator + StonkFun platform_config
-          # from the actual transaction before it accepts the launch.
-          mint="CbwbWMTqzFw3h8DQM5AhkJTEUvZ9ZXqwsLLtLwJ1E7f7"
+          # These mints are locator candidates only. Every returned transaction
+          # still has to pass LaunchLab program + initialize discriminator +
+          # StonkFun platform_config checks inside TrenchScan.
+          candidates=(
+            "BZAhVinDGRgsx4sFem9h1977JkWQfR9mekJ9pfJZaTsZ"
+            "jYYkCH34ivbe1ATk2ZLLkyJdJVb38y9XnxP2bfAjKUd"
+            "AC4EmomN4MSoTu4eYPKERgspY6LEoN6kHvETCG61STNK"
+            "CbwbWMTqzFw3h8DQM5AhkJTEUvZ9ZXqwsLLtLwJ1E7f7"
+          )
 
-          code=$(curl --silent --show-error --max-time 360 \
-            -o /tmp/stonkfun-mint.json \
-            -w "%{http_code}" \
-            "http://127.0.0.1:3000/api/stonkfun/replay?mint=$mint" || true)
+          verified=""
 
-          echo "Known-mint StonkFun locator -> HTTP $code"
+          for mint in "${candidates[@]}"; do
+            echo "Trying locator mint: $mint"
 
-          if [ "$code" != "200" ]; then
-            cat /tmp/stonkfun-mint.json 2>/dev/null || true
-            exit 1
-          fi
+            code=$(curl --silent --show-error --max-time 360 \
+              -o /tmp/stonkfun-candidate.json \
+              -w "%{http_code}" \
+              "http://127.0.0.1:3000/api/stonkfun/replay?mint=$mint" || true)
 
-          jq -e --arg mint "$mint" '
-            .launch.source == "stonkfun.xyz" and
-            .launch.mint == $mint and
-            .launch.signature and
-            .launch.platformConfig and
-            .launch.poolState and
-            .launch.baseVault
-          ' /tmp/stonkfun-mint.json > /dev/null
+            echo "Known-mint locator -> HTTP $code"
 
-          echo "signature=$(jq -r '.launch.signature' /tmp/stonkfun-mint.json)" >> "$GITHUB_OUTPUT"
+            if [ "$code" != "200" ]; then
+              cat /tmp/stonkfun-candidate.json 2>/dev/null || true
+              continue
+            fi
+
+            if jq -e --arg mint "$mint" '
+              .launch.source == "stonkfun.xyz" and
+              .launch.mint == $mint and
+              .launch.signature and
+              .launch.platformConfig and
+              .launch.poolState and
+              .launch.baseVault
+            ' /tmp/stonkfun-candidate.json > /dev/null; then
+              cp /tmp/stonkfun-candidate.json /tmp/stonkfun-mint.json
+              verified=$(jq -r '.launch.signature' /tmp/stonkfun-mint.json)
+              break
+            fi
+          done
+
+          test -n "$verified"
+          echo "signature=$verified" >> "$GITHUB_OUTPUT"
 
       - name: Select verified signature
         id: selected
