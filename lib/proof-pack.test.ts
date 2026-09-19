@@ -63,11 +63,28 @@ describe("proof pack", () => {
       generatedAt: 123,
     });
 
-    expect(pack.schemaVersion).toBe(2);
+    expect(pack.schemaVersion).toBe(3);
     expect(pack.generatedAt).toBe(123);
     expect(pack.receipts.launchTx).toContain("/tx/sig");
     expect(pack.receipts.directFundingTxs).toEqual([]);
     expect(pack.limitations.join(" ")).toContain("not proof");
+  });
+
+  it("keeps launch receipts when the holder snapshot is unavailable", () => {
+    const pack = buildProofPack({
+      launch,
+      snapshot: null,
+      earlyBuyers: null,
+      earlyRetention: null,
+      fundingTrace: null,
+      devHistory: null,
+      trenchBrief: brief,
+      generatedAt: 456,
+    });
+
+    expect(pack.snapshot).toBeNull();
+    expect(pack.receipts.bondingCurve).toContain("/account/curve");
+    expect(pack.limitations[0]).toContain("Holder snapshot was unavailable");
   });
 
   it("builds trench-native share copy with an optional replay link", () => {
