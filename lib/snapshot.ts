@@ -1,7 +1,11 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { PUMP_PROGRAM_ID } from "@/lib/pump";
-import type { HolderRow, TokenSnapshot } from "@/lib/types";
-import { isRpcRateLimit, withRpcRetry } from "@/lib/rpc";
+import type {
+  HolderRow,
+  TokenDistributionSnapshot,
+  TokenSnapshot,
+} from "@/lib/types";
+import { withRpcRetry } from "@/lib/rpc";
 
 const TOKEN_PROGRAM_ID = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -12,6 +16,12 @@ const TOKEN_2022_PROGRAM_ID = new PublicKey(
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
 );
+
+export type DistributionExclusion = {
+  tokenAccount: string | PublicKey;
+  label: string;
+  allowMissing?: boolean;
+};
 
 function pct(numerator: bigint, denominator: bigint): number | null {
   if (denominator <= 0n) return null;
@@ -71,37 +81,169 @@ async function resolveMintTokenProgram(
   return account.owner;
 }
 
-async function readCurveInventory(
-  connection: Connection,
-  associatedBondingCurve: PublicKey,
-) {
-  try {
-    const balance = await withRpcRetry(() =>
-      connection.getTokenAccountBalance(
-        associatedBondingCurve,
-        "confirmed",
-      ),
-    );
-    return BigInt(balance.value.amount);
-  } catch (error) {
-    if (isRpcRateLimit(error)) throw error;
-
-    // A freshly migrated / unusual coin may no longer have the expected ATA.
-    // Treat a genuinely missing/unreadable curve token account as zero.
-    return 0n;
-  }
-}
-
 function tokenAccountOwner(data: Buffer | null | undefined) {
   if (!data || data.length < 64) return null;
 
   try {
-    // SPL Token and Token-2022 share the same base account layout:
-    // mint [0..32), owner [32..64).
     return new PublicKey(data.subarray(32, 64)).toBase58();
   } catch {
     return null;
   }
+}
+
+function tokenAccountState(
+  data: Buffer | null | undefined,
+  expectedMint: PublicKey,
+) {
+  if (!data || data.length < 72) return null;
+
+  const mint = new PublicKey(data.subarray(0, 32));
+  if (!mint.equals(expectedMint)) {
+    throw new Error(
+      `Excluded token account belongs to ${mint.toBase58()}, expected ${expectedMint.toBase58()}`,
+    );
+  }
+
+  return {
+    owner: tokenAccountOwner(data),
+    amount: data.readBigUInt64LE(64),
+  };
+}
+
+export function computeDistributionMath(
+  rawSupply: bigint,
+  excludedRaw: bigint,
+  holderRawAmounts: bigint[],
+) {
+  const rawExternalSupply = clampSub(rawSupply, excludedRaw);
+  const top1Amount = holderRawAmounts[0] ?? 0n;
+  const top10Amount = holderRawAmounts
+    .slice(0, 10)
+    .reduce((sum, amount) => sum + amount, 0n);
+
+  return {
+    rawExternalSupply,
+    externalFloatPct: pct(rawExternalSupply, rawSupply),
+    excludedInventoryPct: pct(excludedRaw, rawSupply),
+    top1ExternalPct: pct(top1Amount, rawExternalSupply),
+    top10ExternalPct: pct(top10Amount, rawExternalSupply),
+  };
+}
+
+/**
+ * Source-neutral token distribution read.
+ *
+ * Callers explicitly provide protocol-controlled token accounts that should be
+ * excluded from "external holder" concentration. Pump passes its curve ATA;
+ * LaunchLab/StonkFun passes its base vault. TrenchScan never guesses that a
+ * protocol vault is a whale.
+ */
+export async function buildExternalDistributionSnapshot(
+  connection: Connection,
+  mintAddress: string,
+  exclusions: DistributionExclusion[],
+): Promise<TokenDistributionSnapshot> {
+  const mint = new PublicKey(mintAddress);
+
+  // Validate the mint owner before applying SPL/Token-2022 account layout.
+  await resolveMintTokenProgram(connection, mint);
+
+  const supplyResponse = await withRpcRetry(() =>
+    connection.getTokenSupply(mint, "confirmed"),
+  );
+  const largestResponse = await withRpcRetry(() =>
+    connection.getTokenLargestAccounts(mint, "confirmed"),
+  );
+
+  const normalizedExclusions = exclusions.map((row) => ({
+    ...row,
+    tokenAccount:
+      typeof row.tokenAccount === "string"
+        ? new PublicKey(row.tokenAccount)
+        : row.tokenAccount,
+  }));
+  const excludedAddresses = new Set(
+    normalizedExclusions.map((row) => row.tokenAccount.toBase58()),
+  );
+  const externalAccounts = largestResponse.value.filter(
+    (row) => !excludedAddresses.has(row.address.toBase58()),
+  );
+
+  const requestedAccounts = [
+    ...normalizedExclusions.map((row) => row.tokenAccount),
+    ...externalAccounts.map((row) => row.address),
+  ];
+  const accountInfos = requestedAccounts.length
+    ? await withRpcRetry(() =>
+        connection.getMultipleAccountsInfo(
+          requestedAccounts,
+          "confirmed",
+        ),
+      )
+    : [];
+
+  const excludedInventory = normalizedExclusions.map((row, index) => {
+    const state = tokenAccountState(accountInfos[index]?.data, mint);
+
+    if (!state && !row.allowMissing) {
+      throw new Error(
+        `Required excluded token account missing: ${row.tokenAccount.toBase58()}`,
+      );
+    }
+
+    return {
+      label: row.label,
+      tokenAccount: row.tokenAccount.toBase58(),
+      rawAmount: (state?.amount ?? 0n).toString(),
+      supplyPct: null as number | null,
+    };
+  });
+
+  const rawSupply = BigInt(supplyResponse.value.amount);
+  const excludedRaw = excludedInventory.reduce(
+    (sum, row) => sum + BigInt(row.rawAmount),
+    0n,
+  );
+  const holderRawAmounts = externalAccounts.map((row) => BigInt(row.amount));
+  const math = computeDistributionMath(
+    rawSupply,
+    excludedRaw,
+    holderRawAmounts,
+  );
+
+  const externalInfoOffset = normalizedExclusions.length;
+  const holders: HolderRow[] = externalAccounts.map((row, index) => {
+    const rawAmount = BigInt(row.amount);
+
+    return {
+      rank: index + 1,
+      tokenAccount: row.address.toBase58(),
+      owner: tokenAccountOwner(
+        accountInfos[externalInfoOffset + index]?.data,
+      ),
+      rawAmount: row.amount,
+      uiAmount: row.uiAmount,
+      shareOfExternalPct: pct(rawAmount, math.rawExternalSupply),
+    };
+  });
+
+  for (const row of excludedInventory) {
+    row.supplyPct = pct(BigInt(row.rawAmount), rawSupply);
+  }
+
+  return {
+    mint: mint.toBase58(),
+    sampledAt: Date.now(),
+    decimals: supplyResponse.value.decimals,
+    rawSupply: rawSupply.toString(),
+    uiSupply: supplyResponse.value.uiAmount,
+    excludedInventory,
+    rawExternalSupply: math.rawExternalSupply.toString(),
+    externalFloatPct: math.externalFloatPct,
+    top1ExternalPct: math.top1ExternalPct,
+    top10ExternalPct: math.top10ExternalPct,
+    holders,
+  };
 }
 
 export async function buildTokenSnapshot(
@@ -115,65 +257,35 @@ export async function buildTokenSnapshot(
     tokenProgram,
   );
 
-  // Keep the required snapshot calls paced and retryable. The public Solana
-  // endpoint has strict per-method limits, while dedicated RPCs complete these
-  // immediately.
-  const supplyResponse = await withRpcRetry(() =>
-    connection.getTokenSupply(mint, "confirmed"),
-  );
-  const largestResponse = await withRpcRetry(() =>
-    connection.getTokenLargestAccounts(mint, "confirmed"),
-  );
-  const curveInventory = await readCurveInventory(
+  const distribution = await buildExternalDistributionSnapshot(
     connection,
-    associatedBondingCurve,
+    mint.toBase58(),
+    [
+      {
+        tokenAccount: associatedBondingCurve,
+        label: "pump-bonding-curve",
+        // After migration the old curve ATA can legitimately disappear.
+        allowMissing: true,
+      },
+    ],
   );
 
-  const rawSupply = BigInt(supplyResponse.value.amount);
-  const rawExternalSupply = clampSub(rawSupply, curveInventory);
-
-  const externalAccounts = largestResponse.value.filter(
-    (row) => !row.address.equals(associatedBondingCurve),
-  );
-
-  const accountInfos = await withRpcRetry(() =>
-    connection.getMultipleAccountsInfo(
-      externalAccounts.map((row) => row.address),
-      "confirmed",
-    ),
-  );
-
-  const holders: HolderRow[] = externalAccounts.map((row, index) => {
-    const rawAmount = BigInt(row.amount);
-    return {
-      rank: index + 1,
-      tokenAccount: row.address.toBase58(),
-      owner: tokenAccountOwner(accountInfos[index]?.data),
-      rawAmount: row.amount,
-      uiAmount: row.uiAmount,
-      shareOfExternalPct: pct(rawAmount, rawExternalSupply),
-    };
-  });
-
-  const top1Amount = holders.length ? BigInt(holders[0].rawAmount) : 0n;
-  const top10Amount = holders
-    .slice(0, 10)
-    .reduce((sum, holder) => sum + BigInt(holder.rawAmount), 0n);
+  const curveInventory = distribution.excludedInventory[0];
 
   return {
-    mint: mint.toBase58(),
-    sampledAt: Date.now(),
-    decimals: supplyResponse.value.decimals,
-    rawSupply: rawSupply.toString(),
-    uiSupply: supplyResponse.value.uiAmount,
+    mint: distribution.mint,
+    sampledAt: distribution.sampledAt,
+    decimals: distribution.decimals,
+    rawSupply: distribution.rawSupply,
+    uiSupply: distribution.uiSupply,
     bondingCurve: bondingCurve.toBase58(),
     associatedBondingCurve: associatedBondingCurve.toBase58(),
-    rawCurveInventory: curveInventory.toString(),
-    curveInventoryPct: pct(curveInventory, rawSupply),
-    rawExternalSupply: rawExternalSupply.toString(),
-    externalFloatPct: pct(rawExternalSupply, rawSupply),
-    top1ExternalPct: pct(top1Amount, rawExternalSupply),
-    top10ExternalPct: pct(top10Amount, rawExternalSupply),
-    holders,
+    rawCurveInventory: curveInventory?.rawAmount ?? "0",
+    curveInventoryPct: curveInventory?.supplyPct ?? 0,
+    rawExternalSupply: distribution.rawExternalSupply,
+    externalFloatPct: distribution.externalFloatPct,
+    top1ExternalPct: distribution.top1ExternalPct,
+    top10ExternalPct: distribution.top10ExternalPct,
+    holders: distribution.holders,
   };
 }
