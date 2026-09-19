@@ -836,6 +836,14 @@ export function LaunchFeed() {
               </button>
               <a
                 className="explorer-link"
+                href={`/api/analyze/${selected.signature}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                FULL JSON ↗
+              </a>
+              <a
+                className="explorer-link"
                 href={`https://solscan.io/token/${selected.mint}`}
                 target="_blank"
                 rel="noreferrer"
@@ -1563,7 +1571,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.15 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.16 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
