@@ -1,4 +1,15 @@
 import { getLaunchHub } from "@/lib/launch-hub";
+import {
+  pumpLaunchEnvelope,
+  stonkFunLaunchEnvelope,
+  type LaunchSource,
+} from "@/lib/launch-source";
+import { getStonkFunLaunchHub } from "@/lib/stonkfun-launch-hub";
+import {
+  combineStreamStatuses,
+  INITIAL_SOURCE_STATUSES,
+  type SourceStreamStatuses,
+} from "@/lib/unified-stream";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,10 +23,11 @@ function sse(event: string, payload: unknown) {
 }
 
 export async function GET(request: Request) {
-  const hub = getLaunchHub();
+  const pumpHub = getLaunchHub();
+  const stonkFunHub = getStonkFunLaunchHub();
 
   let keepAlive: ReturnType<typeof setInterval> | null = null;
-  let unsubscribe: (() => void) | null = null;
+  const unsubscribers: Array<() => void> = [];
   let closed = false;
 
   const cleanup = () => {
@@ -27,8 +39,7 @@ export async function GET(request: Request) {
       keepAlive = null;
     }
 
-    unsubscribe?.();
-    unsubscribe = null;
+    for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
   };
 
   const stream = new ReadableStream<Uint8Array>({
@@ -43,9 +54,39 @@ export async function GET(request: Request) {
         }
       };
 
-      unsubscribe = hub.subscribe((event) => {
-        safeEnqueue(sse(event.type, event.payload));
-      });
+      let sourceStatuses: SourceStreamStatuses = {
+        "pump.fun": { ...INITIAL_SOURCE_STATUSES["pump.fun"] },
+        "stonkfun.xyz": { ...INITIAL_SOURCE_STATUSES["stonkfun.xyz"] },
+      };
+
+      const updateStatus = (
+        source: LaunchSource,
+        status: SourceStreamStatuses[LaunchSource],
+      ) => {
+        sourceStatuses = { ...sourceStatuses, [source]: status };
+        safeEnqueue(sse("status", combineStreamStatuses(sourceStatuses)));
+      };
+
+      unsubscribers.push(
+        pumpHub.subscribe((event) => {
+          if (event.type === "status") {
+            updateStatus("pump.fun", event.payload);
+            return;
+          }
+
+          safeEnqueue(sse("launch", pumpLaunchEnvelope(event.payload)));
+        }),
+        stonkFunHub.subscribe((event) => {
+          if (event.type === "status") {
+            updateStatus("stonkfun.xyz", event.payload);
+            return;
+          }
+
+          safeEnqueue(
+            sse("launch", stonkFunLaunchEnvelope(event.payload)),
+          );
+        }),
+      );
 
       keepAlive = setInterval(() => {
         safeEnqueue(encoder.encode(": keepalive\n\n"));
@@ -64,6 +105,7 @@ export async function GET(request: Request) {
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
+      "X-TrenchScan-Sources": "pump.fun,stonkfun.xyz",
     },
   });
 }

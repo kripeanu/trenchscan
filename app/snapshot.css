@@ -2341,6 +2341,40 @@ tbody tr[data-selected="true"] {
   letter-spacing: 0.025em;
 }
 
+.stonkfun-unsupported-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(155, 125, 255, 0.13);
+}
+
+.stonkfun-unsupported-grid > div {
+  display: grid;
+  gap: 7px;
+  min-height: 74px;
+  align-content: center;
+  padding: 14px 18px;
+  border-right: 1px solid rgba(155, 125, 255, 0.13);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-unsupported-grid > div:last-child {
+  border-right: 0;
+}
+
+.stonkfun-unsupported-grid span {
+  color: #8e82ba;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.stonkfun-unsupported-grid strong {
+  color: #5f746c;
+  font-size: 7px;
+  line-height: 1.45;
+  letter-spacing: 0.035em;
+}
+
 @media (max-width: 980px) {
   .stonkfun-panel-head,
   .stonkfun-launch-card {
@@ -2384,6 +2418,15 @@ tbody tr[data-selected="true"] {
 
   .stonkfun-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stonkfun-unsupported-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stonkfun-unsupported-grid > div {
+    border-right: 0;
+    border-bottom: 1px solid rgba(155, 125, 255, 0.13);
   }
 
   .stonkfun-buyers a {

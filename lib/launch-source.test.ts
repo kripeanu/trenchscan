@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { pumpLaunchEnvelope, stonkFunLaunchEnvelope } from "./launch-source";
+import {
+  pumpLaunchEnvelope,
+  pumpLaunchFromEnvelope,
+  stonkFunLaunchEnvelope,
+} from "./launch-source";
 import type { Launch } from "./types";
 import type { StonkFunLaunch } from "./stonkfun";
 
@@ -59,6 +63,8 @@ describe("source-neutral launch envelope", () => {
       expect(envelope.venue.bondingCurve).toBe("curve");
       expect(envelope.venue.mayhemMode).toBe(true);
     }
+
+    expect(pumpLaunchFromEnvelope(envelope)).toEqual(pump);
   });
 
   it("keeps StonkFun identity common while preserving LaunchLab-only venue evidence", () => {
@@ -73,5 +79,9 @@ describe("source-neutral launch envelope", () => {
       expect(envelope.venue.quoteMint).toBe("quote");
       expect(envelope.venue.rewardMode).toBe(true);
     }
+  });
+
+  it("refuses to reinterpret a LaunchLab envelope as Pump", () => {
+    expect(pumpLaunchFromEnvelope(stonkFunLaunchEnvelope(stonk))).toBeNull();
   });
 });

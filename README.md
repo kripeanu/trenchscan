@@ -10,18 +10,33 @@ Built for **Colosseum Crypto World's Fair 2026**.
 
 ### Live trenches
 
-TrenchScan subscribes directly to Solana and listens for Pump `create_v2` launches. Confirmed launches are decoded from the transaction and streamed to the UI over SSE.
+TrenchScan subscribes directly to Solana and listens for Pump `create_v2` plus verified StonkFun / Raydium LaunchLab initializes. Confirmed launches are decoded by their source adapter, normalized into one launch envelope, and streamed into one newest-first UI over SSE.
 
 The live path now uses one shared launch hub per server process instead of opening a fresh Solana websocket subscription for every browser tab. The hub keeps the latest 80 decoded launches in memory and immediately backfills new SSE clients before continuing with live events.
 
 That means:
 
-- one Solana program subscription can fan out to many connected browsers
+- one subscription per supported program can fan out to many connected browsers
 - a page refresh does not start from an empty feed while the server process stays alive
 - RPC websocket load no longer scales linearly with open tabs
 - initial subscription failures stay connected to the browser and retry with backoff
 
-The feed does not use fake demo rows. If a token appears, TrenchScan observed it on-chain.
+The feed does not use fake demo rows. If a token appears, TrenchScan observed it on-chain or loaded it from an explicitly labeled verified replay receipt.
+
+### Unified Pump + StonkFun trenches
+
+`GET /api/stream` is now the product-level launch stream. It subscribes to the independent Pump and StonkFun hubs, converts both payloads into the source-neutral `LaunchEnvelope`, and emits one feed without flattening their venue evidence.
+
+The dashboard now provides:
+
+- one globally sorted Pump + StonkFun launch table
+- source badges and source-specific mode labels
+- aggregate listener state plus per-source status data
+- a single **SCAN** action that routes Pump to the Pump evidence engine and StonkFun to the LaunchLab evidence engine
+- deterministic verified replays for both sources inside the same feed
+- shareable replay URLs that preserve the launch source
+
+The UX is unified; the analysis semantics are not. StonkFun rows never fall through to Pump curve, funding, retention or creator-history logic.
 
 ### Trench snapshot
 
@@ -221,7 +236,7 @@ The adapter:
 - retains creator, payer, pool state, base mint, quote mint, vaults and token programs
 - distinguishes standard vs reward-mode platform config
 
-This is intentionally **decoder groundwork, not live multi-launchpad support yet**. The current UI still runs Pump-specific holder / curve / early-buyer semantics, so StonkFun will not be wired into the shared feed until those source-specific assumptions are split cleanly.
+This decoder now feeds the unified live launch stream. The shared envelope carries identity only; the UI routes each launch back to its source-specific evidence engine before analysis.
 
 `GET /api/stonkfun/replay` now supports three verification paths: recent bounded platform-config discovery, exact `?signature=<tx>` replay, and `?mint=<mint>` historical location. The mint path walks backward through that mint's own transaction history, then still requires the actual creation transaction to pass the LaunchLab program + initialize discriminator + StonkFun platform-config checks. A mint is a locator, never proof by itself.
 
@@ -252,19 +267,17 @@ TrenchScan now has a source-neutral distribution engine where each launch adapte
 
 Pump-specific early-buyer, funding and dev-history logic is **not** reused for StonkFun yet. Those layers remain source-gated until their LaunchLab semantics are separately verified.
 
-### Experimental StonkFun live stream
+### StonkFun live stream
 
 `GET /api/stonkfun/stream` is an isolated real-time Raydium LaunchLab listener for StonkFun candidates.
 
 It subscribes only while a client is connected, wakes the exact transaction decoder only for `InitializeV2` / `InitializeWithToken2022` log candidates, then rejects any candidate whose decoded `platform_config` is not one of StonkFun's known configs.
 
-The stream remains separate from the Pump dashboard until LaunchLab-specific early-buyer semantics are verified. `/api/health` exposes its listener state, verified buffer, candidate count and generic-LaunchLab rejection count.
+`/api/stonkfun/stream` remains available as a source-isolated diagnostic endpoint, while `/api/stream` now merges verified StonkFun launches into the main product feed. `/api/health` exposes its listener state, verified buffer, candidate count and generic-LaunchLab rejection count.
 
-### StonkFun dashboard panel
+### Source-routed StonkFun analysis panel
 
-The homepage now has a separate **STONKFUN // SOURCE-AWARE INTEL** panel backed by the verified RRM mainnet fixture.
-
-It deliberately stays separate from the Pump launch table while the two sources still have different evidence semantics.
+Selecting a StonkFun row in the unified table opens **STONKFUN // SOURCE-AWARE INTEL**, backed by that row's exact launch signature. The verified RRM mainnet fixture can also be injected into the same feed with **REPLAY STONKFUN TX** for deterministic demos.
 
 The panel can replay the verified StonkFun launch and shows:
 
@@ -275,7 +288,7 @@ The panel can replay the verified StonkFun launch and shows:
 - LaunchLab-specific early buyers only when an exact buy instruction and positive base-token balance delta agree
 - explicit `RPC BLOCKED` states instead of Pump fallbacks or fabricated values
 
-This is the first visible multi-launchpad surface in TrenchScan without pretending the underlying launchpads are interchangeable.
+This is the first end-to-end multi-launchpad surface in TrenchScan without pretending the underlying launchpads are interchangeable.
 
 ### StonkFun early-buyer receipts
 
@@ -302,14 +315,15 @@ The shared envelope carries:
 
 Pump keeps its bonding curve / associated curve / Mayhem fields. StonkFun keeps its LaunchLab pool state / platform config / base + quote vaults / quote mint / initialize variant / reward mode.
 
-This is the architectural boundary needed before the two live launch streams can be merged safely. Common identity is shared; evidence semantics remain source-gated.
+This is the architectural boundary used by the unified stream and scan router. Common identity is shared; evidence semantics remain source-gated.
 
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
 - runtime-verify LaunchLab early-buyer replay on a fresh StonkFun launch
 - verify source-aware StonkFun holder distribution on a dedicated RPC without public-endpoint throttling
-- build the source-aware StonkFun dashboard panel before merging launchpad feeds
+- extract the growing Pump token-detail surface into reusable evidence panels
+- add source-aware funding / retention semantics for LaunchLab only after mainnet verification
 - additional Solana launchpads after the Pump path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
@@ -348,4 +362,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.29 — source-neutral launch envelope`
+`v0.30 — Unified Trenches: Pump + StonkFun live feed with source-aware scan routing`
