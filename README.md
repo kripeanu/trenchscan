@@ -118,6 +118,23 @@ The Trench Brief can now be copied as compact trench-native text with the replay
 
 That means a result can be shared without hiding how TrenchScan got there.
 
+### One-call analysis API
+
+`GET /api/analyze/<launch-transaction-signature>` runs the same evidence pipeline from one exact Pump launch transaction and returns a machine-readable analysis bundle.
+
+The endpoint requires the launch decode and holder snapshot, then gracefully degrades optional RPC stages into explicit warnings instead of fabricating missing evidence. When available, the response contains:
+
+- launch + holder snapshot
+- early-buyer replay
+- wallet fingerprints, direct funders and upstream funding families
+- dev history
+- deterministic Trench Brief
+- versioned proof pack and explorer receipts
+- per-stage timing metadata
+- warnings for optional stages that could not be completed
+
+The token header exposes this as **FULL JSON** so the judge-facing UI and developer-facing API use the same analysis primitives.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
@@ -160,4 +177,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.13 — visual money trail from upstream source to early buyer`
+`v0.14 — one-call receipt-backed analysis API`
