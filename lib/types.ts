@@ -90,6 +90,38 @@ export type EarlyBuyerScan = {
 };
 
 
+export type StonkFunBuyVariant =
+  | "buy_exact_in"
+  | "buy_exact_out";
+
+export type StonkFunEarlyBuyerRow = {
+  rank: number;
+  wallet: string;
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+  secondsAfterLaunch: number | null;
+  rawTokenDelta: string;
+  uiTokenDelta: number | null;
+  supplyPct: number | null;
+  isCreator: boolean;
+  buyVariant: StonkFunBuyVariant;
+};
+
+export type StonkFunEarlyBuyerScan = {
+  mint: string;
+  poolState: string;
+  launchSlot: number;
+  launchBlockTime: number | null;
+  sampledAt: number;
+  historyComplete: boolean;
+  signaturesScanned: number;
+  relevantSignaturesSeen: number;
+  transactionsParsed: number;
+  buyTransactionsSeen: number;
+  buyers: StonkFunEarlyBuyerRow[];
+};
+
 export type EarlyRetentionStatus =
   | "jeeted"
   | "mostly-jeeted"
