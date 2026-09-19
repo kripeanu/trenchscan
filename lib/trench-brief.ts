@@ -63,6 +63,21 @@ export function buildTrenchBrief(input: {
   }
 
   const largestCluster = fundingTrace?.clusters[0] ?? null;
+  const largestUpstreamCluster = fundingTrace?.upstreamClusters[0] ?? null;
+  const freshWallets = fundingTrace?.fingerprints.filter((fingerprint) =>
+    fingerprint.historyClass === "no-prior-history" ||
+    fingerprint.historyClass === "fresh-1h" ||
+    fingerprint.historyClass === "fresh-24h"
+  ).length ?? 0;
+
+  if (fundingTrace && freshWallets > 0) {
+    signals.push({
+      label: "FRESH WALLETS",
+      value: `${freshWallets}/${fundingTrace.walletsChecked}`,
+      detail: "Early wallets with no prior sampled history or a bounded history starting within 24h of their first decoded buy.",
+      tone: freshWallets >= 6 ? "danger" : freshWallets >= 3 ? "warning" : "neutral",
+    });
+  }
 
   if (fundingTrace) {
     signals.push(largestCluster ? {
@@ -82,6 +97,15 @@ export function buildTrenchBrief(input: {
       value: "NOT CHECKED",
       detail: "Run the funding trace for the relationship layer.",
       tone: "neutral",
+    });
+  }
+
+  if (largestUpstreamCluster) {
+    signals.push({
+      label: "ONE HOP DEEPER",
+      value: `${largestUpstreamCluster.buyerCount} WALLETS`,
+      detail: `${largestUpstreamCluster.intermediaryCount} different direct funders trace back to one upstream SOL source. Relationship clue, not ownership proof.`,
+      tone: largestUpstreamCluster.buyerCount >= 4 ? "danger" : "warning",
     });
   }
 
@@ -131,6 +155,8 @@ export function buildTrenchBrief(input: {
   if (top10 !== null) bottom.push(`Top 10 external bags sit at ${pct(top10)}.`);
   if (earlyConcentration !== null) bottom.push(`Decoded early wallets account for ${pct(earlyConcentration)} of supply in this read.`);
   if (largestCluster) bottom.push(`${largestCluster.memberCount} early wallets share one direct funder.`);
+  if (freshWallets) bottom.push(`${freshWallets} early wallets look fresh inside the sampled pre-buy history.`);
+  if (largestUpstreamCluster) bottom.push(`${largestUpstreamCluster.buyerCount} early wallets connect one hop deeper through ${largestUpstreamCluster.intermediaryCount} direct funders.`);
   if (devHistory?.priorLaunches.length) bottom.push(`Dev has ${devHistory.priorLaunches.length} prior Pump create${devHistory.priorLaunches.length === 1 ? "" : "s"} in the sampled window.`);
   if (!complete) bottom.push("Run Same Bankroll + Dev Baggage for the fuller read.");
 
