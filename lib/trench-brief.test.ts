@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildTrenchBrief } from "./trench-brief";
-import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, TokenSnapshot } from "./types";
+import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, TokenSnapshot } from "./types";
 
 const snapshot = (top10ExternalPct: number): TokenSnapshot => ({
   mint: "mint",
@@ -86,6 +86,27 @@ const funding = (members: number): FundingTrace => ({
   upstreamClusters: [],
 });
 
+const retention = (statuses: Array<"jeeted" | "mostly-jeeted" | "trimmed" | "holding" | "added">): EarlyRetentionScan => ({
+  mint: "mint",
+  sampledAt: 1,
+  decimals: 6,
+  walletsChecked: statuses.length,
+  jeetedCount: statuses.filter((status) => status === "jeeted").length,
+  mostlyJeetedCount: statuses.filter((status) => status === "mostly-jeeted").length,
+  trimmedCount: statuses.filter((status) => status === "trimmed").length,
+  holdingCount: statuses.filter((status) => status === "holding").length,
+  addedCount: statuses.filter((status) => status === "added").length,
+  rows: statuses.map((status, index) => ({
+    wallet: `wallet-${index}`,
+    rawFirstBuy: "100",
+    rawCurrent: status === "jeeted" ? "0" : status === "mostly-jeeted" ? "10" : "100",
+    uiFirstBuy: 100,
+    uiCurrent: status === "jeeted" ? 0 : status === "mostly-jeeted" ? 10 : 100,
+    retainedPct: status === "jeeted" ? 0 : status === "mostly-jeeted" ? 10 : 100,
+    status,
+  })),
+});
+
 describe("buildTrenchBrief", () => {
   it("stays conservative when relationship checks are missing", () => {
     const brief = buildTrenchBrief({
@@ -139,6 +160,29 @@ describe("buildTrenchBrief", () => {
     const signal = brief.signals.find((row) => row.label === "ONE HOP DEEPER");
     expect(signal?.value).toBe("3 WALLETS");
     expect(signal?.detail).toContain("Relationship clue, not ownership proof");
+  });
+
+  it("surfaces early wallets that already dumped most of the first decoded grab", () => {
+    const brief = buildTrenchBrief({
+      snapshot: snapshot(42),
+      earlyBuyers: early([3, 3, 3, 3, 3, 3]),
+      earlyRetention: retention([
+        "jeeted",
+        "mostly-jeeted",
+        "jeeted",
+        "mostly-jeeted",
+        "holding",
+        "holding",
+      ]),
+      fundingTrace: funding(1),
+      devHistory: dev(0),
+      devBagPct: 1,
+    });
+
+    const signal = brief.signals.find((row) => row.label === "EARLY EXIT?");
+    expect(signal?.value).toBe("4/6 DUMPED MOST");
+    expect(signal?.tone).toBe("warning");
+    expect(brief.bottomLine).toContain("4/6 checked early wallets");
   });
 
   it("does not pretend a partial early window is complete", () => {
