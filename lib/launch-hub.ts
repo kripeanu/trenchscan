@@ -1,15 +1,22 @@
 import type { Connection } from "@solana/web3.js";
 import {
   createSolanaConnection,
-  decodeLaunch,
+  decodeLaunchFromTransaction,
   looksLikeCreate,
   PUMP_PROGRAM_ID,
 } from "@/lib/pump";
+import {
+  MAX_SUPPORTED_TRANSACTION_VERSION,
+  withRpcRetry,
+} from "@/lib/rpc";
 import type { Launch, StreamStatus } from "@/lib/types";
 
 const MAX_BUFFERED_LAUNCHES = 80;
 const INITIAL_RETRY_MS = 3_000;
 const MAX_RETRY_MS = 30_000;
+const DECODE_BATCH_SIZE = 20;
+const DECODE_BATCH_DELAY_MS = 120;
+const MAX_DECODE_ATTEMPTS = 4;
 
 type HubEvent =
   | { type: "status"; payload: StreamStatus }
@@ -17,15 +24,22 @@ type HubEvent =
 
 type HubListener = (event: HubEvent) => void;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+type PendingLaunch = {
+  signature: string;
+  slot: number;
+  attempts: number;
+};
 
 class LaunchHub {
   private readonly connection: Connection;
   private readonly listeners = new Set<HubListener>();
   private readonly recentLaunches: Launch[] = [];
+  private readonly pendingLaunches = new Map<string, PendingLaunch>();
   private subscriptionId: number | null = null;
   private startPromise: Promise<void> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private decodeTimer: ReturnType<typeof setTimeout> | null = null;
+  private decoding = false;
   private retryMs = INITIAL_RETRY_MS;
   private startedAt = Date.now();
   private lastLaunchAt: number | null = null;
@@ -45,6 +59,7 @@ class LaunchHub {
       subscriptionActive: this.subscriptionId !== null,
       listeners: this.listeners.size,
       bufferedLaunches: this.recentLaunches.length,
+      pendingLaunches: this.pendingLaunches.size,
       lastLaunchAt: this.lastLaunchAt,
       lastErrorAt: this.lastErrorAt,
       uptimeMs: Math.max(0, Date.now() - this.startedAt),
@@ -57,7 +72,7 @@ class LaunchHub {
 
     listener({ type: "status", payload: this.status });
 
-    // Send oldest -> newest because the client prepends each SSE launch.
+    // Send oldest -> newest because the client merges into newest-first order.
     for (const launch of [...this.recentLaunches].reverse()) {
       listener({ type: "launch", payload: launch });
     }
@@ -108,7 +123,101 @@ class LaunchHub {
     }, delay);
   }
 
-  private async handleLogs(
+  private enqueueLaunch(signature: string, slot: number, attempts = 0) {
+    if (
+      this.recentLaunches.some((launch) => launch.signature === signature) ||
+      this.pendingLaunches.has(signature)
+    ) {
+      return;
+    }
+
+    this.pendingLaunches.set(signature, { signature, slot, attempts });
+    this.scheduleDecode(DECODE_BATCH_DELAY_MS);
+  }
+
+  private scheduleDecode(delayMs: number) {
+    if (this.decodeTimer || this.decoding) return;
+
+    this.decodeTimer = setTimeout(() => {
+      this.decodeTimer = null;
+      void this.flushDecodeQueue();
+    }, delayMs);
+  }
+
+  private async flushDecodeQueue() {
+    if (this.decoding || !this.pendingLaunches.size) return;
+
+    const batch = [...this.pendingLaunches.values()].slice(
+      0,
+      DECODE_BATCH_SIZE,
+    );
+    for (const row of batch) this.pendingLaunches.delete(row.signature);
+
+    this.decoding = true;
+
+    try {
+      const transactions = await withRpcRetry(
+        () =>
+          this.connection.getParsedTransactions(
+            batch.map((row) => row.signature),
+            {
+              commitment: "confirmed",
+              maxSupportedTransactionVersion:
+                MAX_SUPPORTED_TRANSACTION_VERSION,
+            },
+          ),
+        [350, 700, 1_400, 2_800],
+      );
+
+      transactions.forEach((transaction, index) => {
+        const candidate = batch[index];
+        if (!candidate) return;
+
+        if (!transaction) {
+          if (candidate.attempts + 1 < MAX_DECODE_ATTEMPTS) {
+            this.enqueueLaunch(
+              candidate.signature,
+              candidate.slot,
+              candidate.attempts + 1,
+            );
+          }
+          return;
+        }
+
+        const launch = decodeLaunchFromTransaction(
+          transaction,
+          candidate.signature,
+          candidate.slot,
+          transaction.blockTime != null
+            ? transaction.blockTime * 1000
+            : Date.now(),
+        );
+
+        if (launch) this.pushLaunch(launch);
+      });
+    } catch (error) {
+      this.lastErrorAt = Date.now();
+      console.warn(
+        "[trenchscan] batched Pump launch decode delayed",
+        error,
+      );
+
+      for (const candidate of batch) {
+        if (candidate.attempts + 1 < MAX_DECODE_ATTEMPTS) {
+          this.enqueueLaunch(
+            candidate.signature,
+            candidate.slot,
+            candidate.attempts + 1,
+          );
+        }
+      }
+    } finally {
+      this.decoding = false;
+      if (this.pendingLaunches.size) this.scheduleDecode(180);
+    }
+  }
+
+  private handleLogs(
     notification: {
       signature: string;
       err: unknown;
@@ -124,31 +233,9 @@ class LaunchHub {
       return;
     }
 
-    // Websocket log delivery can beat getParsedTransaction by a fraction of a
-    // second. Retry briefly before dropping a real launch.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const launch = await decodeLaunch(
-          this.connection,
-          notification.signature,
-          slot,
-        );
-
-        if (launch) this.pushLaunch(launch);
-        return;
-      } catch (error) {
-        if (attempt < 2) {
-          await sleep(300 * (attempt + 1));
-          continue;
-        }
-
-        console.error(
-          "[trenchscan] launch hub failed to decode",
-          notification.signature,
-          error,
-        );
-      }
-    }
+    // Batch exact transaction reads. The old one-request-per-launch path could
+    // self-rate-limit during bursts and silently drop real launches.
+    this.enqueueLaunch(notification.signature, slot);
   }
 
   private async start() {
@@ -161,7 +248,7 @@ class LaunchHub {
       this.subscriptionId = await this.connection.onLogs(
         PUMP_PROGRAM_ID,
         (notification, context) => {
-          void this.handleLogs(notification, context.slot);
+          this.handleLogs(notification, context.slot);
         },
         "confirmed",
       );

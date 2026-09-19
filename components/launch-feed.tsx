@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FundingMap } from "@/components/funding-map";
 import { StonkFunPanel } from "@/components/stonkfun-panel";
+import { LaunchTable } from "@/components/launch-table";
 import { buildDevCadence } from "@/lib/dev-cadence";
 import { buildSameSlotClusters } from "@/lib/early-timing";
 import { TrenchBrand } from "@/components/trench-brand";
@@ -24,6 +25,7 @@ import {
 import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, ReplayLaunch, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
+const LOCAL_LAUNCH_CACHE_KEY = "trenchscan:launches:v31";
 
 // This exact Pump launch was caught by TrenchScan's GitHub-hosted mainnet
 // runtime verification, then reproduced through exact-signature replay.
@@ -56,7 +58,7 @@ function statusCopy(status: UnifiedStreamStatus) {
     ).length;
     return `${live}/2 SOURCES LIVE`;
   }
-  if (status.state === "error") return "RPC ERROR";
+  if (status.state === "error") return "DATA CONNECTION ISSUE";
   return "CONNECTING";
 }
 
@@ -130,7 +132,7 @@ type SnapshotState = "idle" | "loading" | "ready" | "error";
 function evidenceStateCopy(state: SnapshotState) {
   if (state === "ready") return "RECEIPT";
   if (state === "loading") return "DIGGING";
-  if (state === "error") return "RPC BLOCKED";
+  if (state === "error") return "DATA DELAYED";
   return "NOT RUN";
 }
 
@@ -170,6 +172,48 @@ export function LaunchFeed() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_LAUNCH_CACHE_KEY);
+      if (!raw) return;
+
+      const cached = JSON.parse(raw) as LaunchEnvelope[];
+      if (!Array.isArray(cached)) return;
+
+      setLaunches((current) => {
+        let next = current;
+        for (const launch of cached.slice(0, MAX_ROWS)) {
+          if (
+            !launch ||
+            typeof launch.id !== "string" ||
+            typeof launch.signature !== "string" ||
+            typeof launch.seenAt !== "number"
+          ) {
+            continue;
+          }
+
+          next = mergeLaunchEnvelopes(next, launch, MAX_ROWS);
+        }
+        return next;
+      });
+    } catch {
+      // A corrupt browser cache should never block the live chain feed.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!launches.length) return;
+
+    try {
+      window.localStorage.setItem(
+        LOCAL_LAUNCH_CACHE_KEY,
+        JSON.stringify(launches.slice(0, MAX_ROWS)),
+      );
+    } catch {
+      // Private browsing / storage limits should not affect live mode.
+    }
+  }, [launches]);
 
   useEffect(() => {
     const source = new EventSource("/api/stream");
@@ -714,9 +758,9 @@ export function LaunchFeed() {
             <span> Less bullshit.</span>
           </h1>
           <p className="subcopy">
-            See fresh launches as they hit, who dropped them, and who is holding
-            the bag before you ape. Pump and StonkFun now land in one live feed,
-            while each launch keeps its own receipt semantics.
+            See fresh launches as they hit, then let receipt-backed qualification
+            cut the firehose down before you waste a click. Pump and StonkFun land
+            in one feed while every source keeps its own evidence semantics.
           </p>
           <div className="hero-actions">
             <a className="primary-cta" href="#fresh-trenches">START SCANNING →</a>
@@ -780,12 +824,12 @@ export function LaunchFeed() {
 
       <section className="stats-grid" aria-label="Session statistics">
         <div className="stat">
-          <span>FRESH IN BUFFER</span>
+          <span>LAUNCHES SEEN</span>
           <strong>{launches.length}</strong>
           <small>recent launches cached by the shared listener</small>
         </div>
         <div className="stat">
-          <span>OLDEST IN FEED</span>
+          <span>OLDEST SHOWN</span>
           <strong>{sessionAge}</strong>
           <small>still early. eyes open.</small>
         </div>
@@ -806,140 +850,20 @@ export function LaunchFeed() {
 
       <section className="dashboard-grid" id="fresh-trenches">
         <div className="panel launch-panel">
-          <div className="panel-head">
-            <div>
-              <span className="section-title">FRESH TRENCHES</span>
-              <span className="section-note">live Pump + StonkFun launches · newest first</span>
-            </div>
-            <div className="legend">
-              <span className="legend-dot" /> real-time
-            </div>
-          </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>AGE</th>
-                  <th>TOKEN</th>
-                  <th>PAD</th>
-                  <th>MINT</th>
-                  <th>DEV</th>
-                  <th>MODE</th>
-                  <th>TX</th>
-                  <th>SCAN</th>
-                </tr>
-              </thead>
-              <tbody>
-                {launches.map((launch) => (
-                  <tr
-                    key={launchKey(launch)}
-                    data-selected={selected ? launchKey(selected) === launchKey(launch) : false}
-                    data-replay={replayIds.has(launchKey(launch))}
-                  >
-                    <td className="mono age-cell">
-                      {replayIds.has(launchKey(launch)) ? "REPLAY" : ageLabel(launch.seenAt, now)}
-                    </td>
-                    <td>
-                      <div className="token-cell">
-                        <strong>
-                          ${launch.symbol}
-                          {replayIds.has(launchKey(launch)) && (
-                            <em className="replay-chip">REAL TX</em>
-                          )}
-                        </strong>
-                        <span>{launch.name}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="pad-chip" data-source={launch.source}>
-                        {launchSourceLabel(launch.source)}
-                      </span>
-                    </td>
-                    <td className="mono">
-                      <a
-                        href={`https://solscan.io/token/${launch.mint}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={launch.mint}
-                      >
-                        {short(launch.mint)}
-                      </a>
-                    </td>
-                    <td className="mono">
-                      <a
-                        href={`https://solscan.io/account/${launch.creator}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={launch.creator}
-                      >
-                        {short(launch.creator)}
-                      </a>
-                    </td>
-                    <td>
-                      {launch.venue.kind === "pump" ? (
-                        launch.venue.mayhemMode ? (
-                          <span className="chip warning">MAYHEM</span>
-                        ) : (
-                          <span className="chip">STD</span>
-                        )
-                      ) : launch.venue.rewardMode ? (
-                        <span className="chip warning">REWARD</span>
-                      ) : (
-                        <span className="chip">LAUNCHLAB</span>
-                      )}
-                    </td>
-                    <td className="mono">
-                      <a
-                        href={`https://solscan.io/tx/${launch.signature}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {short(launch.signature, 4, 4)} ↗
-                      </a>
-                    </td>
-                    <td>
-                      <button
-                        className="scan-button"
-                        type="button"
-                        onClick={() => void scanLaunch(launch)}
-                      >
-                        {selected && launchKey(selected) === launchKey(launch) &&
-                        launch.source === "pump.fun" &&
-                        snapshotState === "loading"
-                          ? "READING…"
-                          : "SCAN →"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {!launches.length && (
-              <div className="empty-state">
-                <span className="empty-cursor">▌</span>
-                <div>
-                  <strong>
-                    {status.state === "error"
-                      ? "RPC is acting cooked."
-                      : "Waiting for the next freshy…"}
-                  </strong>
-                  <span>
-                    {status.state === "error"
-                      ? status.message ?? "Connection failed."
-                      : "When Pump or StonkFun prints a launch, it lands here."}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
+          <LaunchTable
+            launches={launches}
+            now={now}
+            status={status}
+            selectedKey={selected ? launchKey(selected) : null}
+            replayIds={replayIds}
+            onScan={(launch) => void scanLaunch(launch)}
+          />
         </div>
 
         <aside className="side-stack">
           <section className="side-panel">
             <div className="side-heading">
-              <span>LIVE SIGNALS</span>
+              <span>NEW LAUNCHES</span>
               <small>chain events, no fanfic</small>
             </div>
             <div className="signal-list">
@@ -970,7 +894,7 @@ export function LaunchFeed() {
 
           <section className="side-panel why-panel">
             <div className="side-heading">
-              <span>WHY IT MATTERS</span>
+              <span>WHAT WE CHECK</span>
               <small>the actual edge</small>
             </div>
             <ul>
@@ -1009,7 +933,7 @@ export function LaunchFeed() {
                   ? "RUNNING FULL PASS…"
                   : fullPassDone
                     ? "RERUN FULL PASS"
-                    : "RUN FULL RECEIPT PASS"}
+                    : "RUN ALL CHECKS"}
               </button>
               <button
                 className="share-button"
@@ -1052,8 +976,8 @@ export function LaunchFeed() {
 
           <div className="receipt-coverage">
             <div className="receipt-coverage-head">
-              <span>RECEIPT COVERAGE</span>
-              <small>what we proved vs what the RPC let us read</small>
+              <span>DATA CHECKS</span>
+              <small>what finished vs what the data provider could not return yet</small>
             </div>
             <div className="receipt-coverage-grid">
               {evidenceCoverage.map((row) => (
@@ -1077,7 +1001,7 @@ export function LaunchFeed() {
 
           {snapshotState === "error" && (
             <div className="scan-error">
-              Bag map got RPC-blocked. The other receipts can still run. {snapshotError}
+              Holder data is temporarily unavailable. The other checks can still run. {snapshotError}
             </div>
           )}
 
@@ -1161,7 +1085,7 @@ export function LaunchFeed() {
 
                 {earlyState === "error" && (
                   <div className="early-status error">
-                    Early-buyer RPC read failed. Holder snapshot is still valid. {earlyError}
+                    Early-buyer data is temporarily unavailable. The holder check is still valid. {earlyError}
                   </div>
                 )}
 
@@ -1827,8 +1751,8 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.30 · unified trenches · backed by chain data</span>
-        <span>Pump + StonkFun live · source-aware receipts · no semantic shortcuts</span>
+        <span>TrenchScan v0.31 · signal over noise · backed by chain data</span>
+        <span>live + passed + all · holders + market cap · no hidden score</span>
       </footer>
     </main>
   );
