@@ -227,11 +227,26 @@ This is intentionally **decoder groundwork, not live multi-launchpad support yet
 
 That keeps the expansion honest: matching generic LaunchLab traffic is not enough to call something StonkFun.
 
+### Source-aware holder distribution
+
+Holder concentration is no longer hardwired to the Pump bonding curve internally.
+
+TrenchScan now has a source-neutral distribution engine where each launch adapter must explicitly name the protocol-controlled token accounts that should be removed from external-holder concentration.
+
+- Pump excludes the Pump bonding-curve token account
+- StonkFun / LaunchLab excludes the LaunchLab base vault
+- the excluded inventory stays visible with its own supply percentage
+- the remaining top-1 / top-10 metrics are calculated only against external float
+
+`GET /api/stonkfun/analyze/<launch-signature>` now combines a verified StonkFun launch receipt with this LaunchLab-aware holder distribution. If the distribution RPC is throttled, the route still returns the launch receipt with explicit partial coverage instead of fabricating holder numbers.
+
+Pump-specific early-buyer, funding and dev-history logic is **not** reused for StonkFun yet. Those layers remain source-gated until their LaunchLab semantics are separately verified.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
-- live-wire the verified StonkFun adapter behind source-specific evidence semantics
-- verify StonkFun launch decoding against real mainnet transactions
+- verify StonkFun launch decoding against an exact real mainnet transaction
+- add LaunchLab-specific early-buyer semantics before live-wiring StonkFun into the shared feed
 - additional Solana launchpads after the Pump path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
@@ -270,4 +285,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.23 — deterministic verified-mainnet judge replay`
+`v0.24 — source-aware holder distribution`
