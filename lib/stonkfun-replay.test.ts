@@ -1,6 +1,6 @@
 import type { ConfirmedSignatureInfo } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
-import { mergeStonkFunCandidates } from "./stonkfun-replay";
+import { mergeStonkFunCandidates, oldestSuccessfulCandidates } from "./stonkfun-replay";
 
 function row(
   signature: string,
@@ -37,5 +37,21 @@ describe("mergeStonkFunCandidates", () => {
     ]);
 
     expect(merged.map((item) => item.signature)).toEqual(["ok"]);
+  });
+});
+
+
+describe("oldestSuccessfulCandidates", () => {
+  it("checks oldest successful mint-history rows first", () => {
+    const rows = [
+      row("newest", 30),
+      row("middle-failed", 20, { InstructionError: [0, "Custom"] }),
+      row("middle", 15),
+      row("oldest", 10),
+    ];
+
+    expect(
+      oldestSuccessfulCandidates(rows, 2).map((item) => item.signature),
+    ).toEqual(["oldest", "middle"]);
   });
 });

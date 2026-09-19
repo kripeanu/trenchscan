@@ -1,0 +1,228 @@
+name: StonkFun Known-Mint Probe
+
+on:
+  push:
+    branches:
+      - feat/stonkfun-known-mint-probe
+  workflow_dispatch:
+
+concurrency:
+  group: stonkfun-known-mint-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Start production server
+        run: |
+          npm run start -- -p 3000 > /tmp/trenchscan-server.log 2>&1 &
+          echo $! > /tmp/trenchscan.pid
+
+          for attempt in $(seq 1 45); do
+            if curl --silent --show-error --fail --max-time 10 \
+              http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s /tmp/health.json
+          jq -e '.ok == true' /tmp/health.json
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Resolve historical StonkFun transaction reference
+        id: reference
+        continue-on-error: true
+        run: |
+          # Locator only. The redirected transaction is not trusted until the
+          # exact Solana receipt passes TrenchScan's decoder below.
+          short_url="https://t.co/KWDXgki7Hi"
+          resolved=$(curl -L --silent --show-error --max-time 30 \
+            -o /dev/null -w "%{url_effective}" "$short_url" || true)
+
+          echo "Resolved reference: $resolved"
+
+          signature=$(printf "%s" "$resolved" \
+            | sed -nE 's#.*(/tx/|/transaction/)([1-9A-HJ-NP-Za-km-z]{80,90}).*#\2#p' \
+            | head -n 1)
+
+          test -n "$signature"
+          echo "signature=$signature" >> "$GITHUB_OUTPUT"
+
+      - name: Verify referenced exact StonkFun receipt
+        id: referenced
+        if: steps.reference.outcome == 'success'
+        continue-on-error: true
+        run: |
+          signature="${{ steps.reference.outputs.signature }}"
+
+          code=$(curl --silent --show-error --max-time 180 \
+            -o /tmp/stonkfun-mint.json \
+            -w "%{http_code}" \
+            "http://127.0.0.1:3000/api/stonkfun/replay?signature=$signature" || true)
+
+          echo "Referenced exact replay -> HTTP $code"
+
+          if [ "$code" != "200" ]; then
+            cat /tmp/stonkfun-mint.json 2>/dev/null || true
+            exit 1
+          fi
+
+          jq -e --arg signature "$signature" '
+            .launch.signature == $signature and
+            .launch.source == "stonkfun.xyz" and
+            .launch.platformConfig and
+            .launch.mint and
+            .launch.baseVault
+          ' /tmp/stonkfun-mint.json > /dev/null
+
+          echo "signature=$signature" >> "$GITHUB_OUTPUT"
+
+      - name: Locate StonkFun creation from known mint fallback
+        id: locate
+        if: steps.referenced.outcome != 'success'
+        run: |
+          # These mints are locator candidates only. Every returned transaction
+          # still has to pass LaunchLab program + initialize discriminator +
+          # StonkFun platform_config checks inside TrenchScan.
+          candidates=(
+            "BZAhVinDGRgsx4sFem9h1977JkWQfR9mekJ9pfJZaTsZ"
+            "jYYkCH34ivbe1ATk2ZLLkyJdJVb38y9XnxP2bfAjKUd"
+            "AC4EmomN4MSoTu4eYPKERgspY6LEoN6kHvETCG61STNK"
+            "CbwbWMTqzFw3h8DQM5AhkJTEUvZ9ZXqwsLLtLwJ1E7f7"
+          )
+
+          verified=""
+
+          for mint in "${candidates[@]}"; do
+            echo "Trying locator mint: $mint"
+
+            code=$(curl --silent --show-error --max-time 360 \
+              -o /tmp/stonkfun-candidate.json \
+              -w "%{http_code}" \
+              "http://127.0.0.1:3000/api/stonkfun/replay?mint=$mint" || true)
+
+            echo "Known-mint locator -> HTTP $code"
+
+            if [ "$code" != "200" ]; then
+              cat /tmp/stonkfun-candidate.json 2>/dev/null || true
+              continue
+            fi
+
+            if jq -e --arg mint "$mint" '
+              .launch.source == "stonkfun.xyz" and
+              .launch.mint == $mint and
+              .launch.signature and
+              .launch.platformConfig and
+              .launch.poolState and
+              .launch.baseVault
+            ' /tmp/stonkfun-candidate.json > /dev/null; then
+              cp /tmp/stonkfun-candidate.json /tmp/stonkfun-mint.json
+              verified=$(jq -r '.launch.signature' /tmp/stonkfun-mint.json)
+              break
+            fi
+          done
+
+          test -n "$verified"
+          echo "signature=$verified" >> "$GITHUB_OUTPUT"
+
+      - name: Select verified signature
+        id: selected
+        run: |
+          signature="${{ steps.referenced.outputs.signature }}"
+          if [ -z "$signature" ]; then
+            signature="${{ steps.locate.outputs.signature }}"
+          fi
+
+          test -n "$signature"
+          echo "signature=$signature" >> "$GITHUB_OUTPUT"
+
+      - name: Print verified historical StonkFun launch
+        run: |
+          echo "=== VERIFIED HISTORICAL STONKFUN LAUNCH ==="
+          jq '{
+            signature: .launch.signature,
+            slot: .launch.slot,
+            variant: .launch.variant,
+            rewardMode: .launch.rewardMode,
+            symbol: .launch.symbol,
+            name: .launch.name,
+            mint: .launch.mint,
+            creator: .launch.creator,
+            platformConfig: .launch.platformConfig,
+            poolState: .launch.poolState,
+            baseVault: .launch.baseVault,
+            quoteMint: .launch.quoteMint
+          }' /tmp/stonkfun-mint.json
+
+      - name: Reproduce exact StonkFun receipt
+        run: |
+          signature="${{ steps.selected.outputs.signature }}"
+
+          code=$(curl --silent --show-error --max-time 180 \
+            -o /tmp/stonkfun-exact.json \
+            -w "%{http_code}" \
+            "http://127.0.0.1:3000/api/stonkfun/replay?signature=$signature" || true)
+
+          echo "Exact StonkFun replay -> HTTP $code"
+          test "$code" = "200"
+
+          jq -e --arg signature "$signature" '
+            .launch.signature == $signature and
+            .launch.source == "stonkfun.xyz"
+          ' /tmp/stonkfun-exact.json > /dev/null
+
+      - name: Run source-aware holder analysis
+        continue-on-error: true
+        run: |
+          signature="${{ steps.selected.outputs.signature }}"
+
+          code=$(curl --silent --show-error --max-time 180 \
+            -o /tmp/stonkfun-analysis.json \
+            -w "%{http_code}" \
+            "http://127.0.0.1:3000/api/stonkfun/analyze/$signature" || true)
+
+          echo "StonkFun source-aware analysis -> HTTP $code"
+          cat /tmp/stonkfun-analysis.json 2>/dev/null | jq '{
+            coverage,
+            warnings,
+            launch: {
+              symbol: .launch.symbol,
+              mint: .launch.mint,
+              baseVault: .launch.baseVault
+            },
+            distribution: (
+              if .distribution then {
+                externalFloatPct: .distribution.externalFloatPct,
+                top1ExternalPct: .distribution.top1ExternalPct,
+                top10ExternalPct: .distribution.top10ExternalPct,
+                excludedInventory: .distribution.excludedInventory
+              } else null end
+            )
+          }' || true
+
+      - name: Probe summary
+        if: always()
+        run: |
+          echo "=== SERVER LOG TAIL ==="
+          tail -n 180 /tmp/trenchscan-server.log || true
