@@ -119,40 +119,59 @@ async function loadActivityEvidence(
 async function loadPumpEvidence(
   launch: LaunchEnvelope,
 ): Promise<FeedEvidence> {
+  const snapshotResponse = await fetch(`/api/snapshot/${launch.mint}`, {
+    cache: "no-store",
+  });
+  const snapshot = await responseJson<TokenSnapshot>(snapshotResponse);
+
+  if (!snapshot) {
+    return {
+      sampledExternalAccounts: null,
+      earlyBuyerCount: null,
+      top1ExternalPct: null,
+      top10ExternalPct: null,
+      lastActivityAt: null,
+      activityCoverage: "loading",
+      coverage: "blocked",
+    };
+  }
+
+  // The expensive early-wallet replay only runs after the cheap bag-map gate.
+  // This keeps obvious one-wallet trash from burning RPC history calls.
+  if (
+    snapshot.holders.length <
+    FEED_QUALIFICATION_RULES.minSampledExternalAccounts
+  ) {
+    return {
+      sampledExternalAccounts: snapshot.holders.length,
+      earlyBuyerCount: null,
+      top1ExternalPct: snapshot.top1ExternalPct,
+      top10ExternalPct: snapshot.top10ExternalPct,
+      lastActivityAt: null,
+      activityCoverage: "loading",
+      coverage: "partial",
+    };
+  }
+
   const params = new URLSearchParams({
     fromSlot: String(launch.slot),
     launchSig: launch.signature,
     creator: launch.creator,
   });
-
-  const [snapshotResult, earlyResult] = await Promise.allSettled([
-    fetch(`/api/snapshot/${launch.mint}`, { cache: "no-store" }).then(
-      (response) => responseJson<TokenSnapshot>(response),
-    ),
-    fetch(
-      `/api/early-buyers/${launch.mint}?${params.toString()}`,
-      { cache: "no-store" },
-    ).then((response) => responseJson<EarlyBuyerScan>(response)),
-  ]);
-
-  const snapshot =
-    snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
-  const early =
-    earlyResult.status === "fulfilled" ? earlyResult.value : null;
+  const earlyResponse = await fetch(
+    `/api/early-buyers/${launch.mint}?${params.toString()}`,
+    { cache: "no-store" },
+  );
+  const early = await responseJson<EarlyBuyerScan>(earlyResponse);
 
   return {
-    sampledExternalAccounts: snapshot?.holders.length ?? null,
+    sampledExternalAccounts: snapshot.holders.length,
     earlyBuyerCount: early?.buyers.length ?? null,
-    top1ExternalPct: snapshot?.top1ExternalPct ?? null,
-    top10ExternalPct: snapshot?.top10ExternalPct ?? null,
+    top1ExternalPct: snapshot.top1ExternalPct,
+    top10ExternalPct: snapshot.top10ExternalPct,
     lastActivityAt: null,
     activityCoverage: "loading",
-    coverage:
-      snapshot && early
-        ? "ready"
-        : snapshot || early
-          ? "partial"
-          : "blocked",
+    coverage: early ? "ready" : "partial",
   };
 }
 
@@ -223,7 +242,12 @@ export function LaunchTable({
   useEffect(() => {
     const candidates = launches.slice(0, 10).filter((launch) => {
       const key = launchKey(launch);
-      return !replayIds.has(key) && !requested.current.has(key);
+      const devBurst = countCreatorBurst(launches, launch.creator, Date.now());
+      return (
+        !replayIds.has(key) &&
+        !requested.current.has(key) &&
+        devBurst < FEED_QUALIFICATION_RULES.devFloodLaunches
+      );
     });
 
     if (!candidates.length) return;
@@ -262,6 +286,45 @@ export function LaunchTable({
         }));
       }
     })();
+  }, [launches, replayIds]);
+
+  useEffect(() => {
+    const refreshActivity = async () => {
+      const candidates = launches.slice(0, 10).filter((launch) => {
+        const key = launchKey(launch);
+        const devBurst = countCreatorBurst(launches, launch.creator, Date.now());
+        return (
+          !replayIds.has(key) &&
+          devBurst < FEED_QUALIFICATION_RULES.devFloodLaunches
+        );
+      });
+
+      const updates = await Promise.all(
+        candidates.map(async (launch) => ({
+          key: launchKey(launch),
+          activity: await loadActivityEvidence(launch),
+        })),
+      );
+
+      setEvidenceByKey((current) => {
+        const next = { ...current };
+        for (const update of updates) {
+          const existing = next[update.key];
+          if (!existing) continue;
+          next[update.key] = {
+            ...existing,
+            ...update.activity,
+          };
+        }
+        return next;
+      });
+    };
+
+    const timer = window.setInterval(() => {
+      void refreshActivity();
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
   }, [launches, replayIds]);
 
   const rows = useMemo(
