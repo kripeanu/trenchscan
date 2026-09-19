@@ -112,6 +112,8 @@ It shows:
 
 The current pass samples the 60 creator-wallet signatures immediately before launch. If no prior creates are found, TrenchScan says exactly that — it does **not** claim the wallet is a first-time dev. It also does not label prior launches as rugs without separate evidence.
 
+The same history is now summarized as **Dev Cadence**: prior creates inside 1h / 24h / 7d plus the shortest observed gap between sampled launches. This can surface a creator launching repeatedly in a short window without pretending that frequency alone proves malicious behavior.
+
 ### Trench Brief
 
 The token panel now synthesizes the layers above into a compact evidence brief. It combines holder distribution, decoded early-wallet concentration/timing, shared direct funders when traced, creator history when sampled, and creator bag size.
@@ -210,4 +212,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.16 — one-call receipt-backed analysis API v2`
+`v0.17 — creator launch cadence + burst context`
