@@ -1,14 +1,43 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildFundingTrace } from "@/lib/funding-links";
 import { createSolanaConnection } from "@/lib/pump";
+import type { FundingBuyerInput } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type FundingRequest = {
-  wallets?: unknown;
+  buyers?: unknown;
   launchSlot?: unknown;
 };
+
+function parseBuyer(value: unknown): FundingBuyerInput | null {
+  if (!value || typeof value !== "object") return null;
+
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.wallet !== "string" ||
+    typeof row.firstBuySignature !== "string" ||
+    (row.firstBuyBlockTime !== null && typeof row.firstBuyBlockTime !== "number")
+  ) {
+    return null;
+  }
+
+  try {
+    new PublicKey(row.wallet);
+  } catch {
+    return null;
+  }
+
+  if (row.firstBuySignature.length < 60) return null;
+
+  return {
+    wallet: row.wallet,
+    firstBuySignature: row.firstBuySignature,
+    firstBuyBlockTime:
+      typeof row.firstBuyBlockTime === "number" ? row.firstBuyBlockTime : null,
+  };
+}
 
 export async function POST(request: Request) {
   let body: FundingRequest;
@@ -20,23 +49,18 @@ export async function POST(request: Request) {
   }
 
   const launchSlot = Number(body.launchSlot);
-  const wallets = Array.isArray(body.wallets)
-    ? body.wallets.filter((wallet): wallet is string => typeof wallet === "string")
+  const buyers = Array.isArray(body.buyers)
+    ? body.buyers.map(parseBuyer).filter((buyer): buyer is FundingBuyerInput => buyer !== null)
     : [];
 
-  try {
-    if (!Number.isSafeInteger(launchSlot) || launchSlot <= 0) {
-      throw new Error("bad slot");
-    }
-
-    if (!wallets.length || wallets.length > 12) {
-      throw new Error("bad wallet count");
-    }
-
-    for (const wallet of wallets) new PublicKey(wallet);
-  } catch {
+  if (
+    !Number.isSafeInteger(launchSlot) ||
+    launchSlot <= 0 ||
+    !buyers.length ||
+    buyers.length > 12
+  ) {
     return Response.json(
-      { error: "Invalid launch slot or wallet list" },
+      { error: "Invalid launch slot or early-buyer evidence" },
       { status: 400 },
     );
   }
@@ -44,19 +68,17 @@ export async function POST(request: Request) {
   try {
     const trace = await buildFundingTrace(
       createSolanaConnection(),
-      wallets,
+      buyers,
       launchSlot,
     );
 
     return Response.json(trace, {
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
     console.error("[trenchscan] funding trace failed", launchSlot, error);
     return Response.json(
-      { error: "Could not trace direct funding from Solana RPC" },
+      { error: "Could not trace wallet history and funding from Solana RPC" },
       { status: 502 },
     );
   }

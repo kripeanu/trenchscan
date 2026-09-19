@@ -74,6 +74,16 @@ const funding = (members: number): FundingTrace => ({
     buyers: Array.from({ length: members }, (_, index) => `wallet-${index}`),
     links: [],
   }] : [],
+  fingerprints: Array.from({ length: members }, (_, index) => ({
+    wallet: `wallet-${index}`,
+    sampledSignatures: 2,
+    historyExhausted: true,
+    oldestSampledBlockTime: 50,
+    ageSecondsAtBuy: 50,
+    historyClass: "fresh-1h" as const,
+  })),
+  upstreamLinks: [],
+  upstreamClusters: [],
 });
 
 describe("buildTrenchBrief", () => {
@@ -105,6 +115,30 @@ describe("buildTrenchBrief", () => {
     expect(brief.tone).toBe("danger");
     expect(brief.bottomLine).toContain("5 early wallets share one direct funder");
     expect(brief.signals.filter((signal) => signal.tone === "danger").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("surfaces an upstream funding family without calling it ownership proof", () => {
+    const trace = funding(3);
+    trace.upstreamClusters = [{
+      source: "root",
+      intermediaryCount: 2,
+      buyerCount: 3,
+      intermediaries: ["funder-a", "funder-b"],
+      buyers: ["wallet-0", "wallet-1", "wallet-2"],
+      links: [],
+    }];
+
+    const brief = buildTrenchBrief({
+      snapshot: snapshot(45),
+      earlyBuyers: early([4, 4, 4]),
+      fundingTrace: trace,
+      devHistory: dev(0),
+      devBagPct: 1,
+    });
+
+    const signal = brief.signals.find((row) => row.label === "ONE HOP DEEPER");
+    expect(signal?.value).toBe("3 WALLETS");
+    expect(signal?.detail).toContain("Relationship clue, not ownership proof");
   });
 
   it("does not pretend a partial early window is complete", () => {

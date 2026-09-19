@@ -69,6 +69,29 @@ export type EarlyBuyerScan = {
 };
 
 
+export type FundingBuyerInput = {
+  wallet: string;
+  firstBuySignature: string;
+  firstBuyBlockTime: number | null;
+};
+
+export type WalletHistoryClass =
+  | "no-prior-history"
+  | "fresh-1h"
+  | "fresh-24h"
+  | "established"
+  | "deep-history"
+  | "unknown";
+
+export type WalletFingerprint = {
+  wallet: string;
+  sampledSignatures: number;
+  historyExhausted: boolean;
+  oldestSampledBlockTime: number | null;
+  ageSecondsAtBuy: number | null;
+  historyClass: WalletHistoryClass;
+};
+
 export type FundingLink = {
   buyer: string;
   source: string;
@@ -87,6 +110,25 @@ export type FundingCluster = {
   links: FundingLink[];
 };
 
+export type UpstreamFundingLink = {
+  intermediary: string;
+  source: string;
+  signature: string;
+  blockTime: number | null;
+  secondsBeforeLaunch: number | null;
+  lamports: string;
+  amountSol: number | null;
+};
+
+export type UpstreamFundingCluster = {
+  source: string;
+  intermediaryCount: number;
+  buyerCount: number;
+  intermediaries: string[];
+  buyers: string[];
+  links: UpstreamFundingLink[];
+};
+
 export type FundingTrace = {
   sampledAt: number;
   launchSlot: number;
@@ -95,6 +137,9 @@ export type FundingTrace = {
   linksFound: number;
   links: FundingLink[];
   clusters: FundingCluster[];
+  fingerprints: WalletFingerprint[];
+  upstreamLinks: UpstreamFundingLink[];
+  upstreamClusters: UpstreamFundingCluster[];
 };
 
 export type DevLaunchRow = {

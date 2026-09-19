@@ -52,17 +52,18 @@ The replay is deliberately bounded. If RPC history does not reach the launch bou
 
 ### Same bankroll?
 
-From the early-buyer set, TrenchScan can run an on-demand direct-funding trace. For up to 12 early wallets it looks backward before launch for recent native-SOL transfers and groups wallets that share the same direct funder.
+From the early-buyer set, TrenchScan can run an on-demand wallet fingerprint + funding pass for up to 12 wallets.
 
-The UI shows:
+The pass now shows:
 
-- shared direct funder
-- linked early wallets
-- SOL amount received
-- time before launch
-- explorer receipt for every funding transfer
+- bounded pre-buy wallet history, including wallets with no prior sampled history or histories starting within 1h / 24h of the first decoded buy
+- most recent direct native-SOL funder before launch
+- shared direct-funder clusters
+- one additional upstream funding hop
+- upstream families where different direct funders trace back to the same source
+- SOL amounts, timing and explorer receipts
 
-A shared funder is a **clue, not proof of common control**. CEX hot wallets and payout services can fund unrelated traders, so TrenchScan does not call a shared source a cabal by itself.
+This is deliberately evidence-first. A fresh-looking wallet is based on bounded sampled history, not a claim that an address has never existed before. A shared direct or upstream funder is a **clue, not proof of common control**; CEX hot wallets and payout services can connect unrelated traders.
 
 ### Dev baggage
 
@@ -111,7 +112,7 @@ The individual controls remain available, but the one-click pass is the faster d
 
 ## What comes next
 
-- richer funding graph / second-hop investigation where useful
+- visual funding graph / relationship map on top of the new upstream evidence
 - stronger dev history context without inventing "rug" labels
 - additional Solana launchpads after the Pump v1 path is stable
 
@@ -151,4 +152,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.10 — testable signal engine + CI-covered evidence rules`
+`v0.11 — wallet fingerprints + one-hop-upstream funding families`

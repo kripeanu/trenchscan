@@ -61,6 +61,31 @@ function historyDate(blockTime: number | null) {
   }).format(new Date(blockTime * 1000));
 }
 
+function walletHistoryLabel(historyClass: FundingTrace["fingerprints"][number]["historyClass"]) {
+  switch (historyClass) {
+    case "no-prior-history":
+      return "NO PRIOR TX";
+    case "fresh-1h":
+      return "<1H OLD";
+    case "fresh-24h":
+      return "<24H OLD";
+    case "deep-history":
+      return "50+ TX";
+    case "established":
+      return "OLDER";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function looksFresh(historyClass: FundingTrace["fingerprints"][number]["historyClass"]) {
+  return (
+    historyClass === "no-prior-history" ||
+    historyClass === "fresh-1h" ||
+    historyClass === "fresh-24h"
+  );
+}
+
 function totalSupplyPct(amount: number | null, supply: number | null) {
   if (amount === null || supply === null || supply <= 0) return null;
   return (amount / supply) * 100;
@@ -264,9 +289,11 @@ export function LaunchFeed() {
         cache: "no-store",
         body: JSON.stringify({
           launchSlot: selected.slot,
-          wallets: earlyBuyers.buyers
-            .slice(0, 12)
-            .map((buyer) => buyer.wallet),
+          buyers: earlyBuyers.buyers.slice(0, 12).map((buyer) => ({
+            wallet: buyer.wallet,
+            firstBuySignature: buyer.signature,
+            firstBuyBlockTime: buyer.blockTime,
+          })),
         }),
       });
       const payload = (await response.json()) as
@@ -653,7 +680,7 @@ export function LaunchFeed() {
               <li><b>Read who&apos;s holding the bag</b><span>SEE SIZE</span></li>
               <li><b>Spot the dev wallet in the holders</b><span>WATCH DEV</span></li>
               <li><b>Curve stash stays out of whale math</b><span>LESS BS</span></li>
-              <li><b>Same-bankroll clusters are next</b><span>CONNECT DOTS</span></li>
+              <li><b>Fresh wallet + funding families</b><span>CONNECT DOTS</span></li>
             </ul>
           </section>
         </aside>
@@ -893,7 +920,7 @@ export function LaunchFeed() {
                           <div>
                             <strong>SAME BANKROLL?</strong>
                             <span>
-                              trace the most recent direct SOL funder for the first 12 wallets
+                              read wallet history, direct funders, and one upstream hop
                             </span>
                           </div>
                           <button
@@ -923,11 +950,41 @@ export function LaunchFeed() {
                                 <b>{fundingTrace.walletsChecked}</b> WALLETS CHECKED
                               </span>
                               <span>
-                                <b>{fundingTrace.linksFound}</b> DIRECT FUNDERS FOUND
+                                <b>
+                                  {fundingTrace.fingerprints.filter((fingerprint) =>
+                                    looksFresh(fingerprint.historyClass),
+                                  ).length}
+                                </b>{" "}
+                                FRESHIES
+                              </span>
+                              <span>
+                                <b>{fundingTrace.linksFound}</b> DIRECT FUNDERS
                               </span>
                               <span>
                                 <b>{fundingTrace.clusters.length}</b> SHARED SOURCES
                               </span>
+                              <span>
+                                <b>{fundingTrace.upstreamClusters.length}</b> UPSTREAM FAMILIES
+                              </span>
+                            </div>
+
+                            <div className="fingerprint-strip">
+                              {fundingTrace.fingerprints.map((fingerprint) => (
+                                <a
+                                  key={fingerprint.wallet}
+                                  className="fingerprint-card"
+                                  data-fresh={looksFresh(fingerprint.historyClass)}
+                                  href={`https://solscan.io/account/${fingerprint.wallet}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <span>{short(fingerprint.wallet)}</span>
+                                  <strong>{walletHistoryLabel(fingerprint.historyClass)}</strong>
+                                  <small>
+                                    {fingerprint.sampledSignatures} pre-buy tx sampled
+                                  </small>
+                                </a>
+                              ))}
                             </div>
 
                             {fundingTrace.clusters.length ? (
@@ -983,9 +1040,60 @@ export function LaunchFeed() {
                               </div>
                             )}
 
+                            {fundingTrace.upstreamClusters.length > 0 && (
+                              <section className="upstream-section">
+                                <div className="upstream-title">
+                                  <strong>ONE HOP DEEPER</strong>
+                                  <span>different funders · same upstream source</span>
+                                </div>
+                                <div className="upstream-grid">
+                                  {fundingTrace.upstreamClusters.slice(0, 4).map((cluster) => (
+                                    <article className="upstream-card" key={cluster.source}>
+                                      <div className="upstream-root">
+                                        <span>UPSTREAM SOURCE</span>
+                                        <a
+                                          href={`https://solscan.io/account/${cluster.source}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          {short(cluster.source, 6, 5)} ↗
+                                        </a>
+                                      </div>
+                                      <div className="upstream-score">
+                                        <strong>{cluster.buyerCount} EARLY WALLETS</strong>
+                                        <span>via {cluster.intermediaryCount} direct funders</span>
+                                      </div>
+                                      <div className="upstream-paths">
+                                        {cluster.links.slice(0, 4).map((link) => (
+                                          <div key={link.intermediary}>
+                                            <a
+                                              href={`https://solscan.io/account/${link.intermediary}`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                            >
+                                              {short(link.intermediary)}
+                                            </a>
+                                            <span>←</span>
+                                            <a
+                                              href={`https://solscan.io/tx/${link.signature}`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                            >
+                                              funding receipt ↗
+                                            </a>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </article>
+                                  ))}
+                                </div>
+                              </section>
+                            )}
+
                             <div className="funding-caveat">
-                              CLUE, NOT PROOF: a CEX hot wallet or payout service can fund unrelated
-                              traders. TrenchScan calls this a shared direct funder, not shared ownership.
+                              CLUE, NOT PROOF: wallet age is bounded by sampled history, and shared
+                              direct/upstream funders can be CEX or payout infrastructure. TrenchScan
+                              shows the receipts without pretending that a funding path proves common ownership.
                             </div>
                           </div>
                         )}
@@ -1177,7 +1285,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.9 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.11 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>

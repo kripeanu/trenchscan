@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildFundingClusters } from "./funding-links";
-import type { FundingLink } from "./types";
+import { buildFundingClusters, buildUpstreamFundingClusters } from "./funding-links";
+import type { FundingLink, UpstreamFundingLink } from "./types";
 
 const link = (
   buyer: string,
@@ -51,5 +51,53 @@ describe("buildFundingClusters", () => {
       "source-b",
       "source-a",
     ]);
+  });
+});
+
+
+describe("buildUpstreamFundingClusters", () => {
+  const upstream = (
+    intermediary: string,
+    source: string,
+  ): UpstreamFundingLink => ({
+    intermediary,
+    source,
+    signature: `up-${intermediary}`,
+    blockTime: 1,
+    secondsBeforeLaunch: 20,
+    lamports: "1000000000",
+    amountSol: 1,
+  });
+
+  it("connects buyers through different direct funders with one upstream source", () => {
+    const direct = [
+      link("buyer-a", "funder-a", 1),
+      link("buyer-b", "funder-b", 1),
+      link("buyer-c", "funder-b", 1),
+    ];
+    const clusters = buildUpstreamFundingClusters(
+      [
+        upstream("funder-a", "root"),
+        upstream("funder-b", "root"),
+      ],
+      direct,
+    );
+
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].source).toBe("root");
+    expect(clusters[0].intermediaryCount).toBe(2);
+    expect(clusters[0].buyerCount).toBe(3);
+    expect(clusters[0].buyers).toEqual(
+      expect.arrayContaining(["buyer-a", "buyer-b", "buyer-c"]),
+    );
+  });
+
+  it("does not call one intermediary an upstream family", () => {
+    const clusters = buildUpstreamFundingClusters(
+      [upstream("funder-a", "root")],
+      [link("buyer-a", "funder-a", 1)],
+    );
+
+    expect(clusters).toEqual([]);
   });
 });
