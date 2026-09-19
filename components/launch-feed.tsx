@@ -1666,7 +1666,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.21 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.22 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
