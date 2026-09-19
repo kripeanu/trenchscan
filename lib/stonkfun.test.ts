@@ -6,6 +6,7 @@ import {
   RAYDIUM_LAUNCHLAB_PROGRAM_ID,
   STONKFUN_REWARD_PLATFORM_CONFIG,
   STONKFUN_STANDARD_PLATFORM_CONFIG,
+  looksLikeStonkFunInitialize,
 } from "./stonkfun";
 
 const INIT_V2 = Uint8Array.from([67, 153, 175, 39, 218, 16, 38, 32]);
@@ -127,5 +128,30 @@ describe("StonkFun LaunchLab adapter", () => {
     expect(
       decodeStonkFunInitializeInstruction(candidate, "signature-5", 1),
     ).toBeNull();
+  });
+});
+
+
+describe("looksLikeStonkFunInitialize", () => {
+  it("accepts the two LaunchLab initialize log names", () => {
+    expect(
+      looksLikeStonkFunInitialize([
+        "Program log: Instruction: InitializeV2",
+      ]),
+    ).toBe(true);
+    expect(
+      looksLikeStonkFunInitialize([
+        "Program log: Instruction: InitializeWithToken2022",
+      ]),
+    ).toBe(true);
+  });
+
+  it("does not wake the decoder for LaunchLab swaps", () => {
+    expect(
+      looksLikeStonkFunInitialize([
+        "Program log: Instruction: BuyExactIn",
+        "Program log: Instruction: SellExactIn",
+      ]),
+    ).toBe(false);
   });
 });
