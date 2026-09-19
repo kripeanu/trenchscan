@@ -69,6 +69,41 @@ export type EarlyBuyerScan = {
 };
 
 
+export type EarlyRetentionStatus =
+  | "jeeted"
+  | "mostly-jeeted"
+  | "trimmed"
+  | "holding"
+  | "added";
+
+export type EarlyRetentionInput = {
+  wallet: string;
+  rawFirstBuy: string;
+};
+
+export type EarlyRetentionRow = {
+  wallet: string;
+  rawFirstBuy: string;
+  rawCurrent: string;
+  uiFirstBuy: number | null;
+  uiCurrent: number | null;
+  retainedPct: number | null;
+  status: EarlyRetentionStatus;
+};
+
+export type EarlyRetentionScan = {
+  mint: string;
+  sampledAt: number;
+  decimals: number;
+  walletsChecked: number;
+  jeetedCount: number;
+  mostlyJeetedCount: number;
+  trimmedCount: number;
+  holdingCount: number;
+  addedCount: number;
+  rows: EarlyRetentionRow[];
+};
+
 export type FundingBuyerInput = {
   wallet: string;
   firstBuySignature: string;
