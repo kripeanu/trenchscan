@@ -1326,3 +1326,28 @@ tbody tr[data-replay="true"] .age-cell {
     padding-left: 12px;
   }
 }
+
+
+.launch-row-v31[data-signal="stale"] {
+  opacity: 0.55;
+}
+
+.launch-row-v31[data-signal="stale"]::before {
+  opacity: 0.45;
+  background: #6f7f79;
+  box-shadow: none;
+}
+
+.qualification-cell[data-state="stale"] strong {
+  border-color: rgba(125, 151, 142, 0.3);
+  color: #8ca39b;
+}
+
+.activity-cell strong {
+  font-size: 11px;
+  color: #b9d1c8;
+}
+
+.launch-row-v31[data-signal="qualified"] .activity-cell strong {
+  color: var(--acid);
+}
