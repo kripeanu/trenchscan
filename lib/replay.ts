@@ -8,17 +8,11 @@ import {
   PUMP_PROGRAM_ID,
 } from "@/lib/pump";
 import type { ReplayLaunch } from "@/lib/types";
+import { MAX_SUPPORTED_TRANSACTION_VERSION, withRpcRetry } from "@/lib/rpc";
 
 const RECENT_SIGNATURE_LIMIT = 80;
 const SEARCH_PACE_MS = 325;
-const RATE_LIMIT_RETRY_MS = [750, 1_500, 3_000];
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function looksRateLimited(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("429") || message.toLowerCase().includes("too many requests");
-}
 
 function replayFromParsed(
   transaction: ParsedTransactionWithMeta,
@@ -47,10 +41,12 @@ export async function loadReplayLaunchBySignature(
   connection: Connection,
   signature: string,
 ): Promise<ReplayLaunch | null> {
-  const transaction = await connection.getParsedTransaction(signature, {
-    commitment: "confirmed",
-    maxSupportedTransactionVersion: 0,
-  });
+  const transaction = await withRpcRetry(() =>
+    connection.getParsedTransaction(signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+    }),
+  );
 
   if (!transaction || transaction.meta?.err) return null;
 
@@ -66,22 +62,12 @@ async function loadRecentParsedTransaction(
   connection: Connection,
   info: ConfirmedSignatureInfo,
 ) {
-  for (let attempt = 0; attempt <= RATE_LIMIT_RETRY_MS.length; attempt += 1) {
-    try {
-      return await connection.getParsedTransaction(info.signature, {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      });
-    } catch (error) {
-      if (!looksRateLimited(error) || attempt >= RATE_LIMIT_RETRY_MS.length) {
-        throw error;
-      }
-
-      await sleep(RATE_LIMIT_RETRY_MS[attempt]);
-    }
-  }
-
-  return null;
+  return withRpcRetry(() =>
+    connection.getParsedTransaction(info.signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+    }),
+  );
 }
 
 async function scanRecentSignatures(
