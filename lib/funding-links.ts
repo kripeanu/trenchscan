@@ -9,7 +9,7 @@ import type {
   FundingCluster,
   FundingLink,
   FundingTrace,
-} from "@/lib/types";
+} from "./types";
 
 const MAX_WALLETS = 12;
 const SIGNATURES_PER_WALLET = 14;
