@@ -51,6 +51,6 @@ describe("feed qualification", () => {
         replay: true,
         evidence: null,
       }).state,
-    ).toBe("watching");
+    ).toBe("qualified");
   });
 });
