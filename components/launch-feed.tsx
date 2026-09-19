@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FundingMap } from "@/components/funding-map";
 import { StonkFunPanel } from "@/components/stonkfun-panel";
+import { LaunchTable } from "@/components/launch-table";
 import { buildDevCadence } from "@/lib/dev-cadence";
 import { buildSameSlotClusters } from "@/lib/early-timing";
 import { TrenchBrand } from "@/components/trench-brand";
@@ -806,134 +807,14 @@ export function LaunchFeed() {
 
       <section className="dashboard-grid" id="fresh-trenches">
         <div className="panel launch-panel">
-          <div className="panel-head">
-            <div>
-              <span className="section-title">FRESH TRENCHES</span>
-              <span className="section-note">live Pump + StonkFun launches · newest first</span>
-            </div>
-            <div className="legend">
-              <span className="legend-dot" /> real-time
-            </div>
-          </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>AGE</th>
-                  <th>TOKEN</th>
-                  <th>PAD</th>
-                  <th>MINT</th>
-                  <th>DEV</th>
-                  <th>MODE</th>
-                  <th>TX</th>
-                  <th>SCAN</th>
-                </tr>
-              </thead>
-              <tbody>
-                {launches.map((launch) => (
-                  <tr
-                    key={launchKey(launch)}
-                    data-selected={selected ? launchKey(selected) === launchKey(launch) : false}
-                    data-replay={replayIds.has(launchKey(launch))}
-                  >
-                    <td className="mono age-cell">
-                      {replayIds.has(launchKey(launch)) ? "REPLAY" : ageLabel(launch.seenAt, now)}
-                    </td>
-                    <td>
-                      <div className="token-cell">
-                        <strong>
-                          ${launch.symbol}
-                          {replayIds.has(launchKey(launch)) && (
-                            <em className="replay-chip">REAL TX</em>
-                          )}
-                        </strong>
-                        <span>{launch.name}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="pad-chip" data-source={launch.source}>
-                        {launchSourceLabel(launch.source)}
-                      </span>
-                    </td>
-                    <td className="mono">
-                      <a
-                        href={`https://solscan.io/token/${launch.mint}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={launch.mint}
-                      >
-                        {short(launch.mint)}
-                      </a>
-                    </td>
-                    <td className="mono">
-                      <a
-                        href={`https://solscan.io/account/${launch.creator}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={launch.creator}
-                      >
-                        {short(launch.creator)}
-                      </a>
-                    </td>
-                    <td>
-                      {launch.venue.kind === "pump" ? (
-                        launch.venue.mayhemMode ? (
-                          <span className="chip warning">MAYHEM</span>
-                        ) : (
-                          <span className="chip">STD</span>
-                        )
-                      ) : launch.venue.rewardMode ? (
-                        <span className="chip warning">REWARD</span>
-                      ) : (
-                        <span className="chip">LAUNCHLAB</span>
-                      )}
-                    </td>
-                    <td className="mono">
-                      <a
-                        href={`https://solscan.io/tx/${launch.signature}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {short(launch.signature, 4, 4)} ↗
-                      </a>
-                    </td>
-                    <td>
-                      <button
-                        className="scan-button"
-                        type="button"
-                        onClick={() => void scanLaunch(launch)}
-                      >
-                        {selected && launchKey(selected) === launchKey(launch) &&
-                        launch.source === "pump.fun" &&
-                        snapshotState === "loading"
-                          ? "READING…"
-                          : "SCAN →"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {!launches.length && (
-              <div className="empty-state">
-                <span className="empty-cursor">▌</span>
-                <div>
-                  <strong>
-                    {status.state === "error"
-                      ? "RPC is acting cooked."
-                      : "Waiting for the next freshy…"}
-                  </strong>
-                  <span>
-                    {status.state === "error"
-                      ? status.message ?? "Connection failed."
-                      : "When Pump or StonkFun prints a launch, it lands here."}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
+          <LaunchTable
+            launches={launches}
+            now={now}
+            status={status}
+            selectedKey={selected ? launchKey(selected) : null}
+            replayIds={replayIds}
+            onScan={(launch) => void scanLaunch(launch)}
+          />
         </div>
 
         <aside className="side-stack">
