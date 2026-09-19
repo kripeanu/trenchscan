@@ -117,6 +117,10 @@ The individual controls remain available, but the one-click pass is the faster d
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
 
+## Tests
+
+The deterministic signal layer has unit coverage for Trench Brief escalation rules and shared-direct-funder clustering. CI now runs typecheck, tests and a production build on every PR.
+
 ## Stack
 
 - Next.js + TypeScript
@@ -147,4 +151,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.9 — shared live launch hub + buffered SSE fan-out`
+`v0.10 — testable signal engine + CI-covered evidence rules`
