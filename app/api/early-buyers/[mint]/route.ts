@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildEarlyBuyerScan } from "@/lib/early-buyers";
 import { createSolanaConnection } from "@/lib/pump";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,17 +39,30 @@ export async function GET(
   }
 
   try {
-    const scan = await buildEarlyBuyerScan(
-      createSolanaConnection(),
+    const cacheKey = [
+      "early",
       mint,
       fromSlot,
       launchSignature,
-      creatorParam,
+      creatorParam ?? "",
+    ].join(":");
+    const cached = await getEvidenceCache().getOrLoad(
+      cacheKey,
+      8_000,
+      () =>
+        buildEarlyBuyerScan(
+          createSolanaConnection(),
+          mint,
+          fromSlot,
+          launchSignature,
+          creatorParam,
+        ),
     );
 
-    return Response.json(scan, {
+    return Response.json(cached.value, {
       headers: {
         "Cache-Control": "public, max-age=3, stale-while-revalidate=12",
+        "X-TrenchScan-Cache": cached.status,
       },
     });
   } catch (error) {
