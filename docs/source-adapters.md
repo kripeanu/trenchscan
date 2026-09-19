@@ -46,11 +46,14 @@ Implemented adapter contract:
 - standard vs reward config
 - source-aware holder distribution excluding the LaunchLab base vault
 - exact-signature analysis API with partial coverage
+- isolated live LaunchLab stream with strict StonkFun attribution
+- LaunchLab `buy_exact_in` / `buy_exact_out` verification
+- early-buyer rows requiring exact-pool buy instruction + positive payer token delta
 
 Not yet claimed:
 
-- live StonkFun feed
-- literal first-buyer reconstruction
+- merged StonkFun + Pump dashboard feed
+- literal first-buyer reconstruction when the bounded pool window cannot reach launch
 - LaunchLab-specific funding graph semantics
 - StonkFun creator-history interpretation
 - a cross-launchpad composite risk score
@@ -65,6 +68,7 @@ different lifecycle semantics. TrenchScan makes each adapter declare which
 inventory is protocol-controlled, then the shared distribution engine performs
 the holder math.
 
-The same rule will apply to early buyers and creator history: we add a source
-only when its evidence semantics are understood well enough to survive an
-explorer check.
+The same rule now applies to early buyers: StonkFun buyers are derived from
+LaunchLab buy instructions for the exact verified pool, then cross-checked
+against payer token-balance deltas. Creator history is still source-gated until
+its StonkFun semantics are understood well enough to survive an explorer check.
