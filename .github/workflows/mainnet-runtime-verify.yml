@@ -1,0 +1,224 @@
+name: Mainnet Runtime Verify
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/mainnet-runtime-verify
+
+concurrency:
+  group: mainnet-runtime-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-mainnet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Start production server
+        run: |
+          npm run start -- -p 3000 > /tmp/trenchscan-server.log 2>&1 &
+          echo $! > /tmp/trenchscan.pid
+
+          for attempt in $(seq 1 45); do
+            if curl --silent --show-error --fail --max-time 10               http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s /tmp/health.json
+          echo "=== HEALTH ==="
+          cat /tmp/health.json | jq .
+          jq -e '.ok == true and .rpc.slot > 0 and .rpc.blockHeight > 0' /tmp/health.json
+        env:
+          SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+
+      - name: Catch a real live Pump launch
+        run: |
+          : > /tmp/stream.txt
+
+          curl --silent --show-error --no-buffer --max-time 150             http://127.0.0.1:3000/api/stream > /tmp/stream.txt &
+          stream_pid=$!
+
+          launch_json=""
+
+          for attempt in $(seq 1 120); do
+            launch_json=$(awk '
+              /^event: launch$/ { found=1; next }
+              found && /^data: / {
+                sub(/^data: /, "")
+                print
+                exit
+              }
+            ' /tmp/stream.txt)
+
+            if [ -n "$launch_json" ]; then
+              break
+            fi
+
+            sleep 1
+          done
+
+          kill "$stream_pid" 2>/dev/null || true
+          wait "$stream_pid" 2>/dev/null || true
+
+          if [ -z "$launch_json" ]; then
+            echo "No live Pump launch arrived inside the verification window."
+            echo "=== SSE TAIL ==="
+            tail -n 80 /tmp/stream.txt || true
+            echo "=== SERVER LOG ==="
+            tail -n 200 /tmp/trenchscan-server.log || true
+            exit 1
+          fi
+
+          printf '%s\n' "$launch_json" > /tmp/live-launch.json
+
+          jq -e             '.signature and .mint and .creator and .symbol and .bondingCurve and .associatedBondingCurve'             /tmp/live-launch.json > /dev/null
+
+          echo "=== LIVE LAUNCH ==="
+          jq '{
+            signature,
+            slot,
+            symbol,
+            name,
+            mint,
+            creator,
+            bondingCurve,
+            associatedBondingCurve
+          }' /tmp/live-launch.json
+
+          echo "LAUNCH_SIGNATURE=$(jq -r '.signature' /tmp/live-launch.json)" >> "$GITHUB_ENV"
+          echo "LAUNCH_MINT=$(jq -r '.mint' /tmp/live-launch.json)" >> "$GITHUB_ENV"
+          echo "LAUNCH_CREATOR=$(jq -r '.creator' /tmp/live-launch.json)" >> "$GITHUB_ENV"
+          echo "LAUNCH_SLOT=$(jq -r '.slot' /tmp/live-launch.json)" >> "$GITHUB_ENV"
+          echo "LAUNCH_CURVE=$(jq -r '.bondingCurve' /tmp/live-launch.json)" >> "$GITHUB_ENV"
+          echo "LAUNCH_CURVE_ATA=$(jq -r '.associatedBondingCurve' /tmp/live-launch.json)" >> "$GITHUB_ENV"
+
+      - name: Cool down public RPC
+        run: sleep 12
+
+      - name: Verify exact replay reproducibility
+        run: |
+          success=0
+
+          for attempt in $(seq 1 4); do
+            code=$(curl --silent --show-error --max-time 90               -o /tmp/replay-exact.json               -w "%{http_code}"               "http://127.0.0.1:3000/api/replay?signature=$LAUNCH_SIGNATURE" || true)
+
+            echo "Exact replay attempt $attempt -> HTTP $code"
+
+            if [ "$code" = "200" ] && jq -e               '.launch.signature == env.LAUNCH_SIGNATURE and
+               .launch.mint == env.LAUNCH_MINT and
+               .launch.creator == env.LAUNCH_CREATOR and
+               .launch.bondingCurve == env.LAUNCH_CURVE and
+               .launch.associatedBondingCurve == env.LAUNCH_CURVE_ATA'               /tmp/replay-exact.json > /dev/null; then
+              success=1
+              break
+            fi
+
+            cat /tmp/replay-exact.json 2>/dev/null || true
+            sleep $((attempt * 8))
+          done
+
+          test "$success" = "1"
+          echo "Exact-signature replay reproduced the live launch."
+
+      - name: Cool down before holder snapshot
+        run: sleep 12
+
+      - name: Verify holder snapshot against live launch
+        run: |
+          success=0
+
+          for attempt in $(seq 1 4); do
+            code=$(curl --silent --show-error --max-time 120               -o /tmp/snapshot.json               -w "%{http_code}"               "http://127.0.0.1:3000/api/snapshot/$LAUNCH_MINT" || true)
+
+            echo "Snapshot attempt $attempt -> HTTP $code"
+
+            if [ "$code" = "200" ] && jq -e               '.mint == env.LAUNCH_MINT and
+               .bondingCurve == env.LAUNCH_CURVE and
+               .associatedBondingCurve == env.LAUNCH_CURVE_ATA and
+               .rawSupply and
+               (.holders | type == "array")'               /tmp/snapshot.json > /dev/null; then
+              success=1
+              break
+            fi
+
+            cat /tmp/snapshot.json 2>/dev/null || true
+            sleep $((attempt * 10))
+          done
+
+          if [ "$success" != "1" ]; then
+            echo "Snapshot did not verify against the live launch."
+            tail -n 220 /tmp/trenchscan-server.log || true
+            exit 1
+          fi
+
+          echo "=== SNAPSHOT ==="
+          jq '{
+            mint,
+            bondingCurve,
+            associatedBondingCurve,
+            decimals,
+            uiSupply,
+            curveInventoryPct,
+            externalFloatPct,
+            top1ExternalPct,
+            top10ExternalPct,
+            holderRows: (.holders | length)
+          }' /tmp/snapshot.json
+
+      - name: Attempt full receipt-backed analysis on public RPC
+        continue-on-error: true
+        run: |
+          sleep 15
+
+          code=$(curl --silent --show-error --max-time 210             -o /tmp/analysis.json             -w "%{http_code}"             "http://127.0.0.1:3000/api/analyze/$LAUNCH_SIGNATURE" || true)
+
+          echo "Full analysis -> HTTP $code"
+
+          if [ "$code" != "200" ]; then
+            echo "Public RPC could not sustain the full multi-stage pass."
+            cat /tmp/analysis.json 2>/dev/null || true
+            echo "Core live ingest + exact replay + holder snapshot were verified separately."
+            exit 1
+          fi
+
+          jq -e             '.launch.signature == env.LAUNCH_SIGNATURE and
+             .snapshot.mint == env.LAUNCH_MINT and
+             .trenchBrief.label and
+             .proofPack.schemaVersion >= 2'             /tmp/analysis.json > /dev/null
+
+          echo "=== FULL ANALYSIS SUMMARY ==="
+          jq '{
+            earlyBuyers: (.earlyBuyers.buyers | length? // 0),
+            earlyRetention: (.earlyRetention.walletsChecked // 0),
+            fundingWallets: (.fundingTrace.walletsChecked // 0),
+            priorCreates: (.devHistory.priorLaunches | length? // 0),
+            brief: .trenchBrief.label,
+            warnings: .warnings,
+            timingsMs: .timingsMs
+          }' /tmp/analysis.json
+
+      - name: Print server diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== SERVER LOG ==="
+          tail -n 300 /tmp/trenchscan-server.log || true

@@ -8,9 +8,11 @@ import {
   PUMP_PROGRAM_ID,
 } from "@/lib/pump";
 import type { ReplayLaunch } from "@/lib/types";
+import { MAX_SUPPORTED_TRANSACTION_VERSION, withRpcRetry } from "@/lib/rpc";
 
-const RECENT_SIGNATURE_LIMIT = 48;
-const PARSE_BATCH_SIZE = 12;
+const RECENT_SIGNATURE_LIMIT = 80;
+const SEARCH_PACE_MS = 325;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function replayFromParsed(
   transaction: ParsedTransactionWithMeta,
@@ -39,10 +41,12 @@ export async function loadReplayLaunchBySignature(
   connection: Connection,
   signature: string,
 ): Promise<ReplayLaunch | null> {
-  const transaction = await connection.getParsedTransaction(signature, {
-    commitment: "confirmed",
-    maxSupportedTransactionVersion: 0,
-  });
+  const transaction = await withRpcRetry(() =>
+    connection.getParsedTransaction(signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+    }),
+  );
 
   if (!transaction || transaction.meta?.err) return null;
 
@@ -54,32 +58,41 @@ export async function loadReplayLaunchBySignature(
   );
 }
 
-async function parseRecentChunk(
+async function loadRecentParsedTransaction(
+  connection: Connection,
+  info: ConfirmedSignatureInfo,
+) {
+  return withRpcRetry(() =>
+    connection.getParsedTransaction(info.signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+    }),
+  );
+}
+
+async function scanRecentSignatures(
   connection: Connection,
   signatures: ConfirmedSignatureInfo[],
 ) {
-  const transactions = await connection.getParsedTransactions(
-    signatures.map((row) => row.signature),
-    {
-      commitment: "confirmed",
-      maxSupportedTransactionVersion: 0,
-    },
-  );
+  for (const info of signatures) {
+    if (info.err) continue;
 
-  for (let index = 0; index < signatures.length; index += 1) {
-    const transaction = transactions[index];
-    const info = signatures[index];
+    const transaction = await loadRecentParsedTransaction(connection, info);
 
-    if (!transaction || transaction.meta?.err || info.err) continue;
+    if (transaction && !transaction.meta?.err) {
+      const replay = replayFromParsed(
+        transaction,
+        info.signature,
+        info.slot,
+        info.blockTime,
+      );
 
-    const replay = replayFromParsed(
-      transaction,
-      info.signature,
-      info.slot,
-      info.blockTime,
-    );
+      if (replay) return replay;
+    }
 
-    if (replay) return replay;
+    // Public Solana RPC applies a low per-method getTransaction rate limit.
+    // Pace discovery so replay remains usable even without a paid RPC.
+    await sleep(SEARCH_PACE_MS);
   }
 
   return null;
@@ -101,18 +114,5 @@ export async function findRecentReplayLaunch(
     "confirmed",
   );
 
-  for (
-    let index = 0;
-    index < signatures.length;
-    index += PARSE_BATCH_SIZE
-  ) {
-    const replay = await parseRecentChunk(
-      connection,
-      signatures.slice(index, index + PARSE_BATCH_SIZE),
-    );
-
-    if (replay) return replay;
-  }
-
-  return null;
+  return scanRecentSignatures(connection, signatures);
 }

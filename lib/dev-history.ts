@@ -5,10 +5,11 @@ import {
   type ParsedTransactionWithMeta,
 } from "@solana/web3.js";
 import { decodeLaunchFromTransaction } from "@/lib/pump";
+import { MAX_SUPPORTED_TRANSACTION_VERSION, withRpcRetry } from "@/lib/rpc";
 import type { DevHistoryScan, DevLaunchRow } from "@/lib/types";
 
 const SIGNATURE_LIMIT = 60;
-const PARSE_BATCH_SIZE = 20;
+const PARSE_BATCH_SIZE = 8;
 const MAX_PRIOR_LAUNCHES = 12;
 
 async function parseInBatches(
@@ -22,12 +23,14 @@ async function parseInBatches(
 
   for (let index = 0; index < signatures.length; index += PARSE_BATCH_SIZE) {
     const chunk = signatures.slice(index, index + PARSE_BATCH_SIZE);
-    const parsed = await connection.getParsedTransactions(
-      chunk.map((row) => row.signature),
-      {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      },
+    const parsed = await withRpcRetry(() =>
+      connection.getParsedTransactions(
+        chunk.map((row) => row.signature),
+        {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+        },
+      ),
     );
 
     parsed.forEach((transaction, chunkIndex) => {

@@ -7,6 +7,7 @@ import {
   type ParsedTransactionWithMeta,
 } from "@solana/web3.js";
 import type { Launch } from "@/lib/types";
+import { MAX_SUPPORTED_TRANSACTION_VERSION, withRpcRetry } from "@/lib/rpc";
 
 export const PUMP_PROGRAM_ID = new PublicKey(
   "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
@@ -191,10 +192,12 @@ export async function decodeLaunch(
   signature: string,
   slot: number,
 ): Promise<Launch | null> {
-  const transaction = await connection.getParsedTransaction(signature, {
-    commitment: "confirmed",
-    maxSupportedTransactionVersion: 0,
-  });
+  const transaction = await withRpcRetry(() =>
+    connection.getParsedTransaction(signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+    }),
+  );
 
   if (!transaction) return null;
   return decodeLaunchFromTransaction(transaction, signature, slot);
