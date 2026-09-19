@@ -1,68 +1,70 @@
 export const FEED_QUALIFICATION_RULES = {
-  minSampledExternalAccounts: 6,
-  minEarlyBuyers: 4,
+  minHolders: 10,
+  minMarketCapUsd: 8_000,
   maxQualifiedQuietMs: 2 * 60 * 1000,
   staleAfterMs: 10 * 60 * 1000,
   devFloodLaunches: 4,
   devFloodWindowMs: 10 * 60 * 1000,
-  watchingMaxAgeMs: 10 * 60 * 1000,
+  instantPreviewMs: 12_000,
 } as const;
 
 export type FeedEvidence = {
-  sampledExternalAccounts: number | null;
-  earlyBuyerCount: number | null;
-  top1ExternalPct: number | null;
-  top10ExternalPct: number | null;
+  holders: number | null;
+  holdersComplete: boolean;
+  marketCapUsd: number | null;
   lastActivityAt: number | null;
-  activityCoverage: "loading" | "ready" | "blocked";
-  coverage: "loading" | "ready" | "partial" | "blocked";
+  statsCoverage: "loading" | "ready" | "partial" | "unavailable";
+  activityCoverage: "loading" | "ready" | "unavailable";
 };
 
 export type FeedQualificationState =
-  | "qualified"
-  | "watching"
-  | "rpc-blocked"
-  | "dev-flood"
+  | "checking"
+  | "active"
+  | "low-holders"
+  | "low-market-cap"
+  | "quiet"
+  | "data-delayed"
+  | "dev-spam"
   | "stale";
 
 export type FeedQualification = {
   state: FeedQualificationState;
-  reasons: string[];
+  reason: string;
 };
 
 export function buildFeedQualification(input: {
   evidence: FeedEvidence | null;
   devLaunchesInWindow: number;
   now: number;
+  seenAt: number;
   replay?: boolean;
 }): FeedQualification {
   const {
     evidence,
     devLaunchesInWindow,
     now,
+    seenAt,
     replay = false,
   } = input;
 
   if (replay) {
     return {
-      state: "qualified",
-      reasons: ["verified replay receipt"],
+      state: "active",
+      reason: "Verified replay",
     };
   }
 
   if (devLaunchesInWindow >= FEED_QUALIFICATION_RULES.devFloodLaunches) {
     return {
-      state: "dev-flood",
-      reasons: [
-        `${devLaunchesInWindow} launches from this creator observed inside 10m`,
-      ],
+      state: "dev-spam",
+      reason: `${devLaunchesInWindow} launches from this dev in 10m`,
     };
   }
 
-  if (!evidence || evidence.coverage === "loading") {
+  if (!evidence || evidence.statsCoverage === "loading") {
     return {
-      state: "watching",
-      reasons: ["qualification receipts still loading"],
+      state: "checking",
+      reason: "Checking holders and market cap…",
     };
   }
 
@@ -78,80 +80,77 @@ export function buildFeedQualification(input: {
   ) {
     return {
       state: "stale",
-      reasons: [
-        `pool/curve quiet for ${Math.floor(quietMs / 60_000)}m`,
-      ],
-    };
-  }
-
-  const reasons: string[] = [];
-  const enoughAccounts =
-    evidence.sampledExternalAccounts !== null &&
-    evidence.sampledExternalAccounts >=
-      FEED_QUALIFICATION_RULES.minSampledExternalAccounts;
-  const enoughEarlyBuyers =
-    evidence.earlyBuyerCount !== null &&
-    evidence.earlyBuyerCount >= FEED_QUALIFICATION_RULES.minEarlyBuyers;
-  const recentActivity =
-    quietMs !== null &&
-    quietMs <= FEED_QUALIFICATION_RULES.maxQualifiedQuietMs;
-
-  if (evidence.sampledExternalAccounts !== null) {
-    reasons.push(
-      `${evidence.sampledExternalAccounts} sampled external accounts in bag map`,
-    );
-  }
-
-  if (evidence.earlyBuyerCount !== null) {
-    reasons.push(`${evidence.earlyBuyerCount} decoded early buyers`);
-  }
-
-  if (quietMs !== null) {
-    reasons.push(
-      quietMs < 60_000
-        ? `pool/curve activity ${Math.floor(quietMs / 1000)}s ago`
-        : `pool/curve activity ${Math.floor(quietMs / 60_000)}m ago`,
-    );
-  } else if (evidence.activityCoverage === "blocked") {
-    reasons.push("pool/curve activity receipt RPC-blocked");
-  }
-
-  if (enoughAccounts && enoughEarlyBuyers && recentActivity) {
-    return {
-      state: "qualified",
-      reasons,
+      reason: `No activity for ${Math.floor(quietMs / 60_000)}m`,
     };
   }
 
   if (
-    evidence.coverage === "blocked" &&
-    evidence.activityCoverage === "blocked"
+    evidence.statsCoverage === "unavailable" ||
+    evidence.activityCoverage === "unavailable"
   ) {
     return {
-      state: "rpc-blocked",
-      reasons: reasons.length ? reasons : ["RPC blocked qualification evidence"],
+      state: "data-delayed",
+      reason: "Live launch found · detailed stats delayed",
     };
   }
 
-  if (!enoughAccounts) {
-    reasons.push(
-      `needs ${FEED_QUALIFICATION_RULES.minSampledExternalAccounts}+ sampled external accounts`,
-    );
+  if (
+    evidence.holders !== null &&
+    evidence.holders < FEED_QUALIFICATION_RULES.minHolders
+  ) {
+    return {
+      state: "low-holders",
+      reason: `${evidence.holders} holders · needs ${FEED_QUALIFICATION_RULES.minHolders}+`,
+    };
   }
 
-  if (!enoughEarlyBuyers) {
-    reasons.push(
-      `needs ${FEED_QUALIFICATION_RULES.minEarlyBuyers}+ decoded early buyers`,
-    );
+  if (
+    evidence.marketCapUsd !== null &&
+    evidence.marketCapUsd < FEED_QUALIFICATION_RULES.minMarketCapUsd
+  ) {
+    return {
+      state: "low-market-cap",
+      reason: "Below the $8K market-cap filter",
+    };
   }
 
-  if (!recentActivity) {
-    reasons.push("needs pool/curve activity inside the last 2m");
+  if (
+    evidence.holders === null ||
+    evidence.marketCapUsd === null ||
+    quietMs === null
+  ) {
+    return {
+      state: "data-delayed",
+      reason: "Live launch found · detailed stats delayed",
+    };
+  }
+
+  if (quietMs > FEED_QUALIFICATION_RULES.maxQualifiedQuietMs) {
+    return {
+      state: "quiet",
+      reason: `Last activity ${Math.max(1, Math.floor(quietMs / 60_000))}m ago`,
+    };
+  }
+
+  if (
+    evidence.holders >= FEED_QUALIFICATION_RULES.minHolders &&
+    evidence.marketCapUsd >= FEED_QUALIFICATION_RULES.minMarketCapUsd
+  ) {
+    return {
+      state: "active",
+      reason: "Passed the live filters",
+    };
+  }
+
+  if (now - seenAt <= FEED_QUALIFICATION_RULES.instantPreviewMs) {
+    return {
+      state: "checking",
+      reason: "New launch · checking…",
+    };
   }
 
   return {
-    state:
-      evidence.coverage === "blocked" ? "rpc-blocked" : "watching",
-    reasons,
+    state: "checking",
+    reason: "Checking launch quality…",
   };
 }
