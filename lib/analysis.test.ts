@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveDevBagPct } from "./analysis";
+import { buildAnalysisCoverage, deriveDevBagPct } from "./analysis";
 import type { TokenSnapshot } from "./types";
 
 const baseSnapshot: TokenSnapshot = {
@@ -44,5 +44,34 @@ describe("deriveDevBagPct", () => {
     expect(
       deriveDevBagPct({ ...baseSnapshot, uiSupply: null }, "creator"),
     ).toBeNull();
+  });
+});
+
+
+describe("buildAnalysisCoverage", () => {
+  it("treats skipped dependent layers as neutral for completeness", () => {
+    const coverage = buildAnalysisCoverage([
+      { stage: "launch", state: "ready" },
+      { stage: "snapshot", state: "ready" },
+      { stage: "earlyBuyers", state: "ready" },
+      { stage: "devHistory", state: "ready" },
+      { stage: "earlyRetention", state: "skipped", message: "no buyers" },
+      { stage: "fundingTrace", state: "skipped", message: "no buyers" },
+    ]);
+
+    expect(coverage.complete).toBe(true);
+    expect(coverage.readyStages).toBe(4);
+    expect(coverage.totalStages).toBe(6);
+  });
+
+  it("marks coverage partial when a real evidence layer errors", () => {
+    const coverage = buildAnalysisCoverage([
+      { stage: "launch", state: "ready" },
+      { stage: "snapshot", state: "error", message: "429" },
+      { stage: "earlyBuyers", state: "ready" },
+    ]);
+
+    expect(coverage.complete).toBe(false);
+    expect(coverage.readyStages).toBe(2);
   });
 });
