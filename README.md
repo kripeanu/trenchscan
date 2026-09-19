@@ -50,6 +50,21 @@ For each decoded early wallet TrenchScan shows:
 
 The replay is deliberately bounded. If RPC history does not reach the launch boundary, the UI says **PARTIAL WINDOW** instead of pretending those wallets were literally first.
 
+### Who jeeted?
+
+From the decoded early-wallet set, TrenchScan can compare each wallet's first positive token delta with what that wallet holds **now**.
+
+For up to 12 early wallets the read shows:
+
+- the first decoded grab
+- current token balance
+- retention percentage
+- whether the wallet **JEETED**, **MOSTLY JEETED**, **TRIMMED**, **STILL HOLDING**, or **ADDED**
+
+The retention signal is deliberately narrow: it answers **"how much of that first decoded grab is still in this wallet?"** It is not a full trade ledger or PnL calculation, because a wallet may buy and sell again later.
+
+This evidence also feeds the Trench Brief. A launch where several early wallets already dumped most of their first grab is surfaced explicitly instead of being hidden inside holder concentration.
+
 ### Same bankroll?
 
 From the early-buyer set, TrenchScan can run an on-demand wallet fingerprint + funding pass for up to 12 wallets.
@@ -105,9 +120,10 @@ The replay API also accepts an exact transaction signature so a known launch can
 
 Replay links are now shareable with `?replay=<transaction-signature>`. Opening one automatically loads that real transaction into TrenchScan, which makes a judge/demo flow reproducible instead of relying on whatever launches happen to appear live.
 
-Inside the token scan, **RUN FULL RECEIPT PASS** runs the two optional relationship checks together once the early-buyer replay is ready:
+Inside the token scan, **RUN FULL RECEIPT PASS** runs the optional evidence checks together once the early-buyer replay is ready:
 
-- Same Bankroll direct-funder trace
+- Who Jeeted current-balance retention
+- Same Bankroll direct/upstream funding trace
 - Dev Baggage creator-history scan
 
 The individual controls remain available, but the one-click pass is the faster demo path.
@@ -160,4 +176,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.13 — visual money trail from upstream source to early buyer`
+`v0.14 — early-buyer retention / Who Jeeted evidence layer`
