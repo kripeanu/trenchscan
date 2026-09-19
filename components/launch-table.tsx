@@ -51,6 +51,8 @@ function statusLabel(state: FeedQualificationState) {
       return "RPC BLOCKED";
     case "dev-flood":
       return "DEV FLOOD";
+    case "stale":
+      return "STALE";
     default:
       return "WATCHING";
   }
@@ -74,6 +76,43 @@ async function responseJson<T>(response: Response): Promise<T | null> {
     return (await response.json()) as T;
   } catch {
     return null;
+  }
+}
+
+type ActivityReceipt = {
+  lastActivityAt: number | null;
+};
+
+async function loadActivityEvidence(
+  launch: LaunchEnvelope,
+): Promise<Pick<FeedEvidence, "lastActivityAt" | "activityCoverage">> {
+  const address =
+    launch.venue.kind === "pump"
+      ? launch.venue.bondingCurve
+      : launch.venue.poolState;
+
+  try {
+    const response = await fetch(`/api/activity/${address}`, {
+      cache: "no-store",
+    });
+    const payload = await responseJson<ActivityReceipt>(response);
+
+    if (!payload) {
+      return {
+        lastActivityAt: null,
+        activityCoverage: "blocked",
+      };
+    }
+
+    return {
+      lastActivityAt: payload.lastActivityAt,
+      activityCoverage: "ready",
+    };
+  } catch {
+    return {
+      lastActivityAt: null,
+      activityCoverage: "blocked",
+    };
   }
 }
 
@@ -106,6 +145,8 @@ async function loadPumpEvidence(
     earlyBuyerCount: early?.buyers.length ?? null,
     top1ExternalPct: snapshot?.top1ExternalPct ?? null,
     top10ExternalPct: snapshot?.top10ExternalPct ?? null,
+    lastActivityAt: null,
+    activityCoverage: "loading",
     coverage:
       snapshot && early
         ? "ready"
@@ -131,6 +172,8 @@ async function loadStonkEvidence(
         earlyBuyerCount: null,
         top1ExternalPct: null,
         top10ExternalPct: null,
+        lastActivityAt: null,
+        activityCoverage: "blocked",
         coverage: "blocked",
       };
     }
@@ -140,6 +183,8 @@ async function loadStonkEvidence(
       earlyBuyerCount: analysis.earlyBuyers?.buyers.length ?? null,
       top1ExternalPct: analysis.distribution?.top1ExternalPct ?? null,
       top10ExternalPct: analysis.distribution?.top10ExternalPct ?? null,
+      lastActivityAt: null,
+      activityCoverage: "loading",
       coverage:
         analysis.distribution && analysis.earlyBuyers
           ? "ready"
@@ -192,14 +237,22 @@ export function LaunchTable({
             earlyBuyerCount: null,
             top1ExternalPct: null,
             top10ExternalPct: null,
+            lastActivityAt: null,
+            activityCoverage: "loading",
             coverage: "loading",
           },
         }));
 
-        const evidence =
+        const [baseEvidence, activityEvidence] = await Promise.all([
           launch.source === "pump.fun"
-            ? await loadPumpEvidence(launch)
-            : await loadStonkEvidence(launch);
+            ? loadPumpEvidence(launch)
+            : loadStonkEvidence(launch),
+          loadActivityEvidence(launch),
+        ]);
+        const evidence: FeedEvidence = {
+          ...baseEvidence,
+          ...activityEvidence,
+        };
 
         setEvidenceByKey((current) => ({
           ...current,
@@ -223,6 +276,7 @@ export function LaunchTable({
         const qualification = buildFeedQualification({
           evidence,
           devLaunchesInWindow,
+          now,
           replay,
         });
 
@@ -246,6 +300,7 @@ export function LaunchTable({
     (row) =>
       row.qualification.state !== "qualified" &&
       row.qualification.state !== "dev-flood" &&
+      row.qualification.state !== "stale" &&
       row.ageMs <= FEED_QUALIFICATION_RULES.watchingMaxAgeMs,
   ).length;
 
@@ -258,6 +313,7 @@ export function LaunchTable({
     return (
       row.qualification.state !== "qualified" &&
       row.qualification.state !== "dev-flood" &&
+      row.qualification.state !== "stale" &&
       row.ageMs <= FEED_QUALIFICATION_RULES.watchingMaxAgeMs
     );
   });
@@ -316,7 +372,10 @@ export function LaunchTable({
         <span>
           QUALIFIED = {FEED_QUALIFICATION_RULES.minEarlyBuyers}+ decoded early
           buyers + {FEED_QUALIFICATION_RULES.minSampledExternalAccounts}+
-          sampled external accounts
+          sampled external accounts + pool/curve activity inside 2m
+        </span>
+        <span>
+          STALE = no pool/curve activity for 10m · RAW still keeps it
         </span>
         <span>
           DEV FLOOD = {FEED_QUALIFICATION_RULES.devFloodLaunches}+ launches from
@@ -335,6 +394,7 @@ export function LaunchTable({
               <th>PAD</th>
               <th>EARLY CREW</th>
               <th>BAG MAP</th>
+              <th>ACTIVITY</th>
               <th>DEV</th>
               <th>QUICK ACTIONS</th>
             </tr>
@@ -421,6 +481,21 @@ export function LaunchTable({
                           ? ` · top1 ${pct(evidence.top1ExternalPct)}`
                           : ""}
                       </span>
+                    </div>
+                  </td>
+
+                  <td>
+                    <div className="metric-cell activity-cell">
+                      <strong>
+                        {evidence?.activityCoverage === "loading"
+                          ? "DIGGING"
+                          : evidence?.activityCoverage === "blocked"
+                            ? "RPC BLOCKED"
+                            : evidence?.lastActivityAt
+                              ? ageLabel(evidence.lastActivityAt, now) + " AGO"
+                              : "—"}
+                      </strong>
+                      <span>latest pool / curve tx</span>
                     </div>
                   </td>
 
