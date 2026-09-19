@@ -1778,3 +1778,65 @@ tbody tr[data-selected="true"] {
     grid-template-columns: 1fr;
   }
 }
+
+
+.dev-cadence-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px 20px 4px;
+}
+
+.dev-cadence-strip > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(114, 157, 142, 0.18);
+  background: rgba(4, 14, 11, 0.48);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.dev-cadence-strip span,
+.dev-cadence-strip small {
+  display: block;
+}
+
+.dev-cadence-strip span {
+  color: #5e7a70;
+  font-size: 6.5px;
+  letter-spacing: 0.075em;
+}
+
+.dev-cadence-strip strong {
+  display: block;
+  margin-top: 9px;
+  color: #b6cbc3;
+  font-size: 16px;
+  letter-spacing: -0.035em;
+}
+
+.dev-cadence-strip small {
+  margin-top: 5px;
+  color: #4f6a61;
+  font-size: 6.5px;
+}
+
+.dev-cadence-strip > div[data-hot="true"] {
+  border-color: rgba(255, 199, 102, 0.27);
+  background: rgba(255, 199, 102, 0.025);
+}
+
+.dev-cadence-strip > div[data-hot="true"] strong {
+  color: var(--amber);
+}
+
+@media (max-width: 960px) {
+  .dev-cadence-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .dev-cadence-strip {
+    grid-template-columns: 1fr;
+  }
+}
