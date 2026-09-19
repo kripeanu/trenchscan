@@ -150,6 +150,24 @@ The Trench Brief can now be copied as compact trench-native text with the replay
 
 That means a result can be shared without hiding how TrenchScan got there.
 
+
+### One-call analysis API
+
+`GET /api/analyze/<launch-transaction-signature>` runs the same evidence pipeline from one exact Pump launch transaction and returns a machine-readable analysis bundle.
+
+The endpoint requires a valid launch decode + holder snapshot, then runs the optional evidence layers with explicit degradation instead of guessed values:
+
+- early-buyer replay
+- **Who Jeeted?** current-balance retention
+- direct funders, wallet freshness and one-hop upstream families
+- dev history
+- exact-slot timing via the same deterministic Trench Brief logic
+- proof pack v2 with receipts + limitations
+- per-stage timing metadata
+- warnings for any optional RPC stage that could not complete
+
+The token header exposes this as **FULL JSON**. That means the judge-facing UI, replay flow and developer-facing API all use the same underlying evidence modules.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
@@ -192,4 +210,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.15 — exact-slot early activity + Who Jeeted retention`
+`v0.16 — one-call receipt-backed analysis API v2`
