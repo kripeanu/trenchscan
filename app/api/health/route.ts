@@ -1,5 +1,6 @@
 import { createSolanaConnection } from "@/lib/pump";
 import { getLaunchHub } from "@/lib/launch-hub";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export async function GET() {
           blockHeight,
         },
         listener: hub.diagnostics(),
+        evidenceCache: getEvidenceCache().stats(),
       },
       {
         headers: {
@@ -39,6 +41,7 @@ export async function GET() {
         checkedAt: Date.now(),
         rpcLatencyMs: Math.max(0, Date.now() - started),
         listener: hub.diagnostics(),
+        evidenceCache: getEvidenceCache().stats(),
         error: error instanceof Error ? error.message : "Unknown RPC error",
       },
       {

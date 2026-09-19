@@ -154,6 +154,22 @@ That means a result can be shared without hiding how TrenchScan got there.
 
 
 
+### Evidence cache + RPC pressure guard
+
+The server now keeps a small in-memory cache for evidence that was already proven and coalesces duplicate in-flight requests.
+
+That means two tabs, a judge opening **FULL JSON**, and the visible UI do not all hammer the RPC for the same launch at once.
+
+Current cache windows stay deliberately short where evidence can move:
+
+- holder snapshot: 5s
+- early-buyer replay: 8s
+- current early-wallet retention: 3s
+- full analysis: 5s
+- creator history + pre-launch funding trace: 60s
+
+Failed RPC calls are **never cached**. Every API response includes `X-TrenchScan-Cache: hit | miss | join`, and `/api/health` exposes cache entries / in-flight requests / hit / miss / join counters.
+
 ### Runtime health
 
 `GET /api/health` provides a deployment/debug health check without exposing RPC credentials.
@@ -232,4 +248,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.19 — progressive evidence coverage + partial analysis`
+`v0.20 — evidence cache + duplicate RPC coalescing`

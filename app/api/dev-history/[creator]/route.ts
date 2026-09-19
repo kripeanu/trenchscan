@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildDevHistoryScan } from "@/lib/dev-history";
 import { createSolanaConnection } from "@/lib/pump";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,15 +27,21 @@ export async function GET(
   }
 
   try {
-    const scan = await buildDevHistoryScan(
-      createSolanaConnection(),
-      creator,
-      before,
+    const cached = await getEvidenceCache().getOrLoad(
+      `dev:${creator}:${before}`,
+      60_000,
+      () =>
+        buildDevHistoryScan(
+          createSolanaConnection(),
+          creator,
+          before,
+        ),
     );
 
-    return Response.json(scan, {
+    return Response.json(cached.value, {
       headers: {
         "Cache-Control": "public, max-age=10, stale-while-revalidate=30",
+        "X-TrenchScan-Cache": cached.status,
       },
     });
   } catch (error) {

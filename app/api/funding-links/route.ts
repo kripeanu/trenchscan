@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildFundingTrace } from "@/lib/funding-links";
 import { createSolanaConnection } from "@/lib/pump";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 import type { FundingBuyerInput } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -66,14 +67,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const trace = await buildFundingTrace(
-      createSolanaConnection(),
-      buyers,
-      launchSlot,
+    const identity = buyers
+      .map((buyer) => `${buyer.wallet}@${buyer.firstBuySignature}`)
+      .join(",");
+    const cached = await getEvidenceCache().getOrLoad(
+      `funding:${launchSlot}:${identity}`,
+      60_000,
+      () =>
+        buildFundingTrace(
+          createSolanaConnection(),
+          buyers,
+          launchSlot,
+        ),
     );
 
-    return Response.json(trace, {
-      headers: { "Cache-Control": "no-store" },
+    return Response.json(cached.value, {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-TrenchScan-Cache": cached.status,
+      },
     });
   } catch (error) {
     console.error("[trenchscan] funding trace failed", launchSlot, error);

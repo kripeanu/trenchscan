@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { createSolanaConnection } from "@/lib/pump";
 import { buildTokenSnapshot } from "@/lib/snapshot";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,10 +20,15 @@ export async function GET(
   }
 
   try {
-    const snapshot = await buildTokenSnapshot(createSolanaConnection(), mint);
-    return Response.json(snapshot, {
+    const cached = await getEvidenceCache().getOrLoad(
+      `snapshot:${mint}`,
+      5_000,
+      () => buildTokenSnapshot(createSolanaConnection(), mint),
+    );
+    return Response.json(cached.value, {
       headers: {
         "Cache-Control": "public, max-age=2, stale-while-revalidate=8",
+        "X-TrenchScan-Cache": cached.status,
       },
     });
   } catch (error) {

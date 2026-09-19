@@ -1,6 +1,7 @@
 import bs58 from "bs58";
 import { analyzeLaunchSignature } from "@/lib/analysis";
 import { createSolanaConnection } from "@/lib/pump";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,10 +28,16 @@ export async function GET(
   }
 
   try {
-    const analysis = await analyzeLaunchSignature(
-      createSolanaConnection(),
-      signature,
+    const cached = await getEvidenceCache().getOrLoad(
+      `analysis:${signature}`,
+      5_000,
+      () =>
+        analyzeLaunchSignature(
+          createSolanaConnection(),
+          signature,
+        ),
     );
+    const analysis = cached.value;
 
     if (!analysis) {
       return Response.json(
@@ -43,6 +50,7 @@ export async function GET(
       headers: {
         "Cache-Control": "public, max-age=15, stale-while-revalidate=45",
         "X-TrenchScan-Coverage": analysis.coverage.complete ? "complete" : "partial",
+        "X-TrenchScan-Cache": cached.status,
       },
     });
   } catch (error) {
