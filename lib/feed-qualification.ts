@@ -1,6 +1,8 @@
 export const FEED_QUALIFICATION_RULES = {
   minSampledExternalAccounts: 6,
   minEarlyBuyers: 4,
+  maxQualifiedQuietMs: 2 * 60 * 1000,
+  staleAfterMs: 10 * 60 * 1000,
   devFloodLaunches: 4,
   devFloodWindowMs: 10 * 60 * 1000,
   watchingMaxAgeMs: 10 * 60 * 1000,
@@ -11,6 +13,8 @@ export type FeedEvidence = {
   earlyBuyerCount: number | null;
   top1ExternalPct: number | null;
   top10ExternalPct: number | null;
+  lastActivityAt: number | null;
+  activityCoverage: "loading" | "ready" | "blocked";
   coverage: "loading" | "ready" | "partial" | "blocked";
 };
 
@@ -18,7 +22,8 @@ export type FeedQualificationState =
   | "qualified"
   | "watching"
   | "rpc-blocked"
-  | "dev-flood";
+  | "dev-flood"
+  | "stale";
 
 export type FeedQualification = {
   state: FeedQualificationState;
@@ -28,9 +33,15 @@ export type FeedQualification = {
 export function buildFeedQualification(input: {
   evidence: FeedEvidence | null;
   devLaunchesInWindow: number;
+  now: number;
   replay?: boolean;
 }): FeedQualification {
-  const { evidence, devLaunchesInWindow, replay = false } = input;
+  const {
+    evidence,
+    devLaunchesInWindow,
+    now,
+    replay = false,
+  } = input;
 
   if (replay) {
     return {
@@ -55,6 +66,24 @@ export function buildFeedQualification(input: {
     };
   }
 
+  const quietMs =
+    evidence.activityCoverage === "ready" &&
+    evidence.lastActivityAt !== null
+      ? Math.max(0, now - evidence.lastActivityAt)
+      : null;
+
+  if (
+    quietMs !== null &&
+    quietMs > FEED_QUALIFICATION_RULES.staleAfterMs
+  ) {
+    return {
+      state: "stale",
+      reasons: [
+        `pool/curve quiet for ${Math.floor(quietMs / 60_000)}m`,
+      ],
+    };
+  }
+
   const reasons: string[] = [];
   const enoughAccounts =
     evidence.sampledExternalAccounts !== null &&
@@ -63,6 +92,9 @@ export function buildFeedQualification(input: {
   const enoughEarlyBuyers =
     evidence.earlyBuyerCount !== null &&
     evidence.earlyBuyerCount >= FEED_QUALIFICATION_RULES.minEarlyBuyers;
+  const recentActivity =
+    quietMs !== null &&
+    quietMs <= FEED_QUALIFICATION_RULES.maxQualifiedQuietMs;
 
   if (evidence.sampledExternalAccounts !== null) {
     reasons.push(
@@ -74,14 +106,27 @@ export function buildFeedQualification(input: {
     reasons.push(`${evidence.earlyBuyerCount} decoded early buyers`);
   }
 
-  if (replay || (enoughAccounts && enoughEarlyBuyers)) {
+  if (quietMs !== null) {
+    reasons.push(
+      quietMs < 60_000
+        ? `pool/curve activity ${Math.floor(quietMs / 1000)}s ago`
+        : `pool/curve activity ${Math.floor(quietMs / 60_000)}m ago`,
+    );
+  } else if (evidence.activityCoverage === "blocked") {
+    reasons.push("pool/curve activity receipt RPC-blocked");
+  }
+
+  if (enoughAccounts && enoughEarlyBuyers && recentActivity) {
     return {
       state: "qualified",
-      reasons: replay ? ["verified replay receipt", ...reasons] : reasons,
+      reasons,
     };
   }
 
-  if (evidence.coverage === "blocked") {
+  if (
+    evidence.coverage === "blocked" &&
+    evidence.activityCoverage === "blocked"
+  ) {
     return {
       state: "rpc-blocked",
       reasons: reasons.length ? reasons : ["RPC blocked qualification evidence"],
@@ -100,8 +145,13 @@ export function buildFeedQualification(input: {
     );
   }
 
+  if (!recentActivity) {
+    reasons.push("needs pool/curve activity inside the last 2m");
+  }
+
   return {
-    state: "watching",
+    state:
+      evidence.coverage === "blocked" ? "rpc-blocked" : "watching",
     reasons,
   };
 }
