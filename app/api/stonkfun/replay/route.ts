@@ -1,8 +1,10 @@
 import bs58 from "bs58";
+import { PublicKey } from "@solana/web3.js";
 import { getEvidenceCache } from "@/lib/evidence-cache";
 import { createSolanaConnection } from "@/lib/pump";
 import {
   findRecentStonkFunReplay,
+  findStonkFunReplayForMint,
   loadStonkFunReplayBySignature,
 } from "@/lib/stonkfun-replay";
 
@@ -20,12 +22,24 @@ function validSignature(signature: string) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const signature = searchParams.get("signature");
+  const mint = searchParams.get("mint");
 
   if (signature && !validSignature(signature)) {
     return Response.json(
       { error: "Invalid Solana transaction signature" },
       { status: 400 },
     );
+  }
+
+  if (mint) {
+    try {
+      new PublicKey(mint);
+    } catch {
+      return Response.json(
+        { error: "Invalid Solana mint" },
+        { status: 400 },
+      );
+    }
   }
 
   try {
@@ -40,18 +54,30 @@ export async function GET(request: Request) {
               signature,
             ),
         )
-      : await cache.getOrLoad(
-          "stonkfun-replay:recent",
-          15_000,
-          () => findRecentStonkFunReplay(createSolanaConnection()),
-        );
+      : mint
+        ? await cache.getOrLoad(
+            `stonkfun-replay-mint:${mint}`,
+            5 * 60_000,
+            () =>
+              findStonkFunReplayForMint(
+                createSolanaConnection(),
+                mint,
+              ),
+          )
+        : await cache.getOrLoad(
+            "stonkfun-replay:recent",
+            15_000,
+            () => findRecentStonkFunReplay(createSolanaConnection()),
+          );
 
     if (!cached.value) {
       return Response.json(
         {
           error: signature
             ? "Transaction is not a verified StonkFun LaunchLab initialize"
-            : "No verified recent StonkFun LaunchLab initialize found in the bounded search",
+            : mint
+              ? "No verified StonkFun LaunchLab initialize found in the bounded mint history"
+              : "No verified recent StonkFun LaunchLab initialize found in the bounded search",
         },
         { status: 404 },
       );
@@ -59,14 +85,14 @@ export async function GET(request: Request) {
 
     return Response.json(cached.value, {
       headers: {
-        "Cache-Control": signature
+        "Cache-Control": signature || mint
           ? "public, max-age=30, stale-while-revalidate=90"
           : "public, max-age=5, stale-while-revalidate=15",
         "X-TrenchScan-Cache": cached.status,
       },
     });
   } catch (error) {
-    console.error("[trenchscan] StonkFun replay failed", signature, error);
+    console.error("[trenchscan] StonkFun replay failed", { signature, mint }, error);
     return Response.json(
       {
         error: "Could not inspect StonkFun LaunchLab history from Solana RPC",
