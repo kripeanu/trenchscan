@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildEarlyRetentionScan } from "@/lib/early-retention";
 import { createSolanaConnection } from "@/lib/pump";
+import { getEvidenceCache } from "@/lib/evidence-cache";
 import type { EarlyRetentionInput } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -66,14 +67,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const scan = await buildEarlyRetentionScan(
-      createSolanaConnection(),
-      body.mint,
-      buyers,
+    const identity = buyers
+      .map((buyer) => `${buyer.wallet}@${buyer.rawFirstBuy}`)
+      .join(",");
+    const cached = await getEvidenceCache().getOrLoad(
+      `retention:${body.mint}:${identity}`,
+      3_000,
+      () =>
+        buildEarlyRetentionScan(
+          createSolanaConnection(),
+          body.mint as string,
+          buyers,
+        ),
     );
 
-    return Response.json(scan, {
-      headers: { "Cache-Control": "no-store" },
+    return Response.json(cached.value, {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-TrenchScan-Cache": cached.status,
+      },
     });
   } catch (error) {
     console.error("[trenchscan] early retention scan failed", body.mint, error);
