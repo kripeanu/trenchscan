@@ -242,6 +242,14 @@ TrenchScan now has a source-neutral distribution engine where each launch adapte
 
 Pump-specific early-buyer, funding and dev-history logic is **not** reused for StonkFun yet. Those layers remain source-gated until their LaunchLab semantics are separately verified.
 
+### Experimental StonkFun live stream
+
+`GET /api/stonkfun/stream` is now an isolated live LaunchLab listener.
+
+It subscribes to Raydium LaunchLab logs only while a client is connected, wakes the expensive transaction decoder only for `InitializeV2` / `InitializeWithToken2022` log candidates, then **rejects every candidate that does not carry one of StonkFun's known platform configs**.
+
+This stream is deliberately separate from the Pump dashboard for now. The source adapter can prove StonkFun launches without letting Pump-specific early-buyer semantics leak into them. `/api/health` exposes StonkFun listener state, buffered verified launches, candidate count and rejected generic LaunchLab candidates.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
@@ -285,4 +293,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.24 — source-aware holder distribution`
+`v0.26 — isolated StonkFun live stream`
