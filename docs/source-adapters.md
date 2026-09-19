@@ -1,7 +1,7 @@
 # Source adapter contract
 
-TrenchScan is moving from a Pump-only scanner to a launch-intelligence engine
-with explicit source adapters.
+TrenchScan is a multi-source launch-intelligence engine with explicit source
+adapters.
 
 The rule is simple: **shared plumbing is allowed; borrowed semantics are not.**
 
@@ -52,7 +52,6 @@ Implemented adapter contract:
 
 Not yet claimed:
 
-- merged StonkFun + Pump dashboard feed
 - literal first-buyer reconstruction when the bounded pool window cannot reach launch
 - LaunchLab-specific funding graph semantics
 - StonkFun creator-history interpretation
@@ -72,3 +71,14 @@ The same rule now applies to early buyers: StonkFun buyers are derived from
 LaunchLab buy instructions for the exact verified pool, then cross-checked
 against payer token-balance deltas. Creator history is still source-gated until
 its StonkFun semantics are understood well enough to survive an explorer check.
+
+## Unified discovery, source-routed evidence
+
+The browser consumes both live hubs through `/api/stream`. Every row is a
+source-neutral `LaunchEnvelope`, globally sorted by observation time. The
+single SCAN action then routes Pump envelopes to Pump evidence and StonkFun
+envelopes to LaunchLab evidence.
+
+This is deliberately a UX merge, not a semantic merge. A source can join live
+discovery before every deeper analysis layer exists, but unsupported layers
+must stay explicit and must never inherit another adapter's claims.

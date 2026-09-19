@@ -530,6 +530,12 @@ tbody tr:hover {
   letter-spacing: 0.08em;
 }
 
+.pad-chip[data-source="stonkfun.xyz"] {
+  border-color: rgba(255, 199, 102, 0.4);
+  color: var(--amber);
+  background: rgba(255, 199, 102, 0.035);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -818,6 +824,22 @@ tbody tr:hover {
 .replay-cta:hover:not(:disabled) {
   border-color: var(--cyan);
   background: rgba(88, 207, 255, 0.075);
+}
+
+.stonkfun-replay-cta {
+  border-color: rgba(255, 199, 102, 0.34);
+  color: var(--amber);
+}
+
+.stonkfun-replay-cta:hover:not(:disabled) {
+  border-color: var(--amber);
+  background: rgba(255, 199, 102, 0.075);
+}
+
+.stonkfun-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .replay-cta:disabled {

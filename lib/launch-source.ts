@@ -60,6 +60,32 @@ export function pumpLaunchEnvelope(launch: Launch): LaunchEnvelope {
   };
 }
 
+export function pumpLaunchFromEnvelope(
+  envelope: LaunchEnvelope,
+): Launch | null {
+  if (envelope.source !== "pump.fun" || envelope.venue.kind !== "pump") {
+    return null;
+  }
+
+  return {
+    id: envelope.id,
+    signature: envelope.signature,
+    slot: envelope.slot,
+    seenAt: envelope.seenAt,
+    name: envelope.name,
+    symbol: envelope.symbol,
+    uri: envelope.uri,
+    mint: envelope.mint,
+    creator: envelope.creator,
+    payer: envelope.payer,
+    bondingCurve: envelope.venue.bondingCurve,
+    associatedBondingCurve: envelope.venue.associatedBondingCurve,
+    source: "pump.fun",
+    isMayhemMode: envelope.venue.mayhemMode,
+    isHolderReward: envelope.venue.holderReward,
+  };
+}
+
 export function stonkFunLaunchEnvelope(
   launch: StonkFunLaunch,
 ): LaunchEnvelope {

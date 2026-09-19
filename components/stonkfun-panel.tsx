@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { StonkFunAnalysis } from "@/lib/stonkfun-analysis";
+import type { LaunchEnvelope } from "@/lib/launch-source";
 
 const VERIFIED_STONKFUN_SIGNATURE =
   "36T8KBJ5nYvb7mnuZp4ApqPpzzHDYXDuYnewZadGe4GfBXasGwx2YdXG37WuAaLWUzU1Wa83dGVzYab9NP6AviUu";
@@ -29,18 +30,34 @@ function coverageCopy(value: "receipt" | "rpc-blocked") {
 
 type PanelState = "idle" | "loading" | "ready" | "error";
 
-export function StonkFunPanel() {
+type StonkFunPanelProps = {
+  launch?: LaunchEnvelope;
+  signature?: string;
+  autoLoad?: boolean;
+  replay?: boolean;
+  onClose?: () => void;
+};
+
+export function StonkFunPanel({
+  launch,
+  signature = VERIFIED_STONKFUN_SIGNATURE,
+  autoLoad = false,
+  replay = false,
+  onClose,
+}: StonkFunPanelProps = {}) {
   const [state, setState] = useState<PanelState>("idle");
   const [analysis, setAnalysis] = useState<StonkFunAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeRequest = useRef(0);
 
-  async function loadVerifiedReceipt() {
+  async function loadReceipt(targetSignature = signature) {
+    const requestId = ++activeRequest.current;
     setState("loading");
     setError(null);
 
     try {
       const response = await fetch(
-        "/api/stonkfun/analyze/" + VERIFIED_STONKFUN_SIGNATURE,
+        "/api/stonkfun/analyze/" + targetSignature,
         { cache: "no-store" },
       );
       const payload = (await response.json()) as
@@ -53,9 +70,11 @@ export function StonkFunPanel() {
         );
       }
 
+      if (activeRequest.current !== requestId) return;
       setAnalysis(payload);
       setState("ready");
     } catch (caught) {
+      if (activeRequest.current !== requestId) return;
       setAnalysis(null);
       setState("error");
       setError(
@@ -66,12 +85,32 @@ export function StonkFunPanel() {
     }
   }
 
+  useEffect(() => {
+    setAnalysis(null);
+    setError(null);
+    setState(autoLoad ? "loading" : "idle");
+
+    if (autoLoad) void loadReceipt(signature);
+    // loadReceipt only closes over the current signature.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      activeRequest.current += 1;
+    };
+  }, [autoLoad, signature]);
+
   return (
-    <section className="stonkfun-panel" id="stonkfun-intel">
+    <section className="stonkfun-panel" id={launch ? "trench-take" : "stonkfun-intel"} aria-live="polite">
       <div className="stonkfun-panel-head">
         <div>
-          <span className="eyebrow">STONKFUN // SOURCE-AWARE INTEL</span>
-          <h2>Same chain. Different launch semantics.</h2>
+          <span className="eyebrow">
+            {replay
+              ? "STONKFUN REPLAY // REAL ON-CHAIN TX"
+              : "STONKFUN // SOURCE-AWARE INTEL"}
+          </span>
+          <h2>
+            {launch ? `$${launch.symbol} ` : "Same chain. "}
+            <span>{launch ? launch.name : "Different launch semantics."}</span>
+          </h2>
           <p>
             StonkFun runs on Raydium LaunchLab, so TrenchScan verifies its own
             platform config, pool, vault and buy instructions instead of
@@ -79,26 +118,36 @@ export function StonkFunPanel() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="stonkfun-load-button"
-          disabled={state === "loading"}
-          onClick={() => void loadVerifiedReceipt()}
-        >
-          {state === "loading"
-            ? "PULLING RECEIPTS…"
-            : state === "ready"
-              ? "RERUN VERIFIED RECEIPT"
-              : "LOAD VERIFIED STONKFUN →"}
-        </button>
+        <div className="stonkfun-panel-actions">
+          <button
+            type="button"
+            className="stonkfun-load-button"
+            disabled={state === "loading"}
+            onClick={() => void loadReceipt()}
+          >
+            {state === "loading"
+              ? "PULLING RECEIPTS…"
+              : state === "ready"
+                ? "RERUN RECEIPTS"
+                : launch
+                  ? "SCAN STONKFUN →"
+                  : "LOAD VERIFIED STONKFUN →"}
+          </button>
+          {onClose && (
+            <button className="close-button" type="button" onClick={onClose}>
+              CLOSE ×
+            </button>
+          )}
+        </div>
       </div>
 
       {state === "idle" && (
         <div className="stonkfun-empty">
           <strong>MAINNET FIXTURE READY</strong>
           <span>
-            RRM · Token-2022 reward-mode LaunchLab initialize · exact receipt
-            pinned in the repo
+            {launch
+              ? `${launch.symbol} · LaunchLab launch receipt ready for source-aware analysis`
+              : "RRM · Token-2022 reward-mode LaunchLab initialize · exact receipt pinned in the repo"}
           </span>
         </div>
       )}
@@ -243,6 +292,21 @@ export function StonkFunPanel() {
                 </div>
               )}
             </section>
+          </div>
+
+          <div className="stonkfun-unsupported-grid" aria-label="Source limitations">
+            <div>
+              <span>WHO JEETED</span>
+              <strong>NOT VERIFIED FOR LAUNCHLAB YET</strong>
+            </div>
+            <div>
+              <span>SAME BANKROLL</span>
+              <strong>SOURCE-SPECIFIC ADAPTER PENDING</strong>
+            </div>
+            <div>
+              <span>DEV BAGGAGE</span>
+              <strong>NO PUMP SEMANTICS REUSED</strong>
+            </div>
           </div>
 
           <div className="stonkfun-caveat">

@@ -8,7 +8,20 @@ import { buildSameSlotClusters } from "@/lib/early-timing";
 import { TrenchBrand } from "@/components/trench-brand";
 import { buildTrenchBrief } from "@/lib/trench-brief";
 import { buildProofPack, buildShareText } from "@/lib/proof-pack";
-import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, Launch, ReplayLaunch, StreamStatus, TokenSnapshot } from "@/lib/types";
+import {
+  launchSourceLabel,
+  pumpLaunchEnvelope,
+  pumpLaunchFromEnvelope,
+  stonkFunLaunchEnvelope,
+  type LaunchEnvelope,
+} from "@/lib/launch-source";
+import type { StonkFunReplay } from "@/lib/stonkfun-replay";
+import {
+  INITIAL_SOURCE_STATUSES,
+  mergeLaunchEnvelopes,
+  type UnifiedStreamStatus,
+} from "@/lib/unified-stream";
+import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, ReplayLaunch, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -16,10 +29,16 @@ const MAX_ROWS = 80;
 // runtime verification, then reproduced through exact-signature replay.
 const VERIFIED_MAINNET_DEMO_SIGNATURE =
   "2G85yXGzDj9zr5RR3WTfyFExG7FR65ZK8rntp1gUYtTyMNG5STzDgGC43Qhsi8J2qQusYMvYf6DmUdC6rH4Hksq";
+const VERIFIED_STONKFUN_SIGNATURE =
+  "36T8KBJ5nYvb7mnuZp4ApqPpzzHDYXDuYnewZadGe4GfBXasGwx2YdXG37WuAaLWUzU1Wa83dGVzYab9NP6AviUu";
 
 function short(value: string, left = 5, right = 4) {
   if (value.length <= left + right + 3) return value;
   return `${value.slice(0, left)}…${value.slice(-right)}`;
+}
+
+function launchKey(launch: Pick<LaunchEnvelope, "source" | "id">) {
+  return `${launch.source}:${launch.id}`;
 }
 
 function ageLabel(timestamp: number, now: number) {
@@ -30,8 +49,13 @@ function ageLabel(timestamp: number, now: number) {
   return `${Math.floor(minutes / 60)}h`;
 }
 
-function statusCopy(status: StreamStatus) {
-  if (status.state === "live") return "LISTENING";
+function statusCopy(status: UnifiedStreamStatus) {
+  if (status.state === "live") {
+    const live = Object.values(status.sources).filter(
+      (source) => source.state === "live",
+    ).length;
+    return `${live}/2 SOURCES LIVE`;
+  }
   if (status.state === "error") return "RPC ERROR";
   return "CONNECTING";
 }
@@ -111,10 +135,13 @@ function evidenceStateCopy(state: SnapshotState) {
 }
 
 export function LaunchFeed() {
-  const [launches, setLaunches] = useState<Launch[]>([]);
-  const [status, setStatus] = useState<StreamStatus>({ state: "connecting" });
+  const [launches, setLaunches] = useState<LaunchEnvelope[]>([]);
+  const [status, setStatus] = useState<UnifiedStreamStatus>({
+    state: "connecting",
+    sources: INITIAL_SOURCE_STATUSES,
+  });
   const [now, setNow] = useState(Date.now());
-  const [selected, setSelected] = useState<Launch | null>(null);
+  const [selected, setSelected] = useState<LaunchEnvelope | null>(null);
   const [snapshot, setSnapshot] = useState<TokenSnapshot | null>(null);
   const [snapshotState, setSnapshotState] = useState<SnapshotState>("idle");
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -133,6 +160,8 @@ export function LaunchFeed() {
   const [replayIds, setReplayIds] = useState<Set<string>>(() => new Set());
   const [replayState, setReplayState] = useState<SnapshotState>("idle");
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [stonkReplayState, setStonkReplayState] = useState<SnapshotState>("idle");
+  const [stonkReplayError, setStonkReplayError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
   const activeScan = useRef<string | null>(null);
@@ -147,19 +176,22 @@ export function LaunchFeed() {
 
     const onStatus = (event: MessageEvent<string>) => {
       try {
-        setStatus(JSON.parse(event.data) as StreamStatus);
+        setStatus(JSON.parse(event.data) as UnifiedStreamStatus);
       } catch {
-        setStatus({ state: "error", message: "Bad status payload" });
+        setStatus({
+          state: "error",
+          message: "Bad status payload",
+          sources: INITIAL_SOURCE_STATUSES,
+        });
       }
     };
 
     const onLaunch = (event: MessageEvent<string>) => {
       try {
-        const launch = JSON.parse(event.data) as Launch;
-        setLaunches((current) => {
-          if (current.some((item) => item.id === launch.id)) return current;
-          return [launch, ...current].slice(0, MAX_ROWS);
-        });
+        const launch = JSON.parse(event.data) as LaunchEnvelope;
+        setLaunches((current) =>
+          mergeLaunchEnvelopes(current, launch, MAX_ROWS),
+        );
       } catch {
         // One cursed payload should never take down the trenches.
       }
@@ -172,6 +204,7 @@ export function LaunchFeed() {
       setStatus({
         state: "connecting",
         message: "Stream interrupted. Reconnecting…",
+        sources: INITIAL_SOURCE_STATUSES,
       });
     };
 
@@ -183,8 +216,16 @@ export function LaunchFeed() {
   }, []);
 
   useEffect(() => {
-    const signature = new URLSearchParams(window.location.search).get("replay");
-    if (signature) void replayRealLaunch(signature);
+    const params = new URLSearchParams(window.location.search);
+    const signature = params.get("replay");
+    const source = params.get("source");
+    if (!signature) return;
+
+    if (source === "stonkfun.xyz") {
+      void replayStonkFunLaunch(signature);
+    } else {
+      void replayRealLaunch(signature);
+    }
   }, []);
 
   const sessionAge = useMemo(() => {
@@ -211,22 +252,26 @@ export function LaunchFeed() {
         );
       }
 
+      const envelope = {
+        ...pumpLaunchEnvelope(payload.launch),
+        seenAt: Date.now(),
+      };
       setReplayIds((current) => {
         const next = new Set(current);
-        next.add(payload.launch.id);
+        next.add(launchKey(envelope));
         return next;
       });
-      setLaunches((current) => [
-        payload.launch,
-        ...current.filter((launch) => launch.id !== payload.launch.id),
-      ].slice(0, MAX_ROWS));
+      setLaunches((current) =>
+        mergeLaunchEnvelopes(current, envelope, MAX_ROWS),
+      );
 
       const replayUrl = new URL(window.location.href);
       replayUrl.searchParams.set("replay", payload.launch.signature);
+      replayUrl.searchParams.set("source", "pump.fun");
       window.history.replaceState(null, "", replayUrl);
 
       setReplayState("ready");
-      void scanLaunch(payload.launch);
+      void scanLaunch(envelope);
 
       window.setTimeout(() => {
         document
@@ -241,11 +286,69 @@ export function LaunchFeed() {
     }
   }
 
+  async function replayStonkFunLaunch(
+    signature = VERIFIED_STONKFUN_SIGNATURE,
+  ) {
+    setStonkReplayState("loading");
+    setStonkReplayError(null);
+
+    try {
+      const params = new URLSearchParams({ signature });
+      const response = await fetch(`/api/stonkfun/replay?${params}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as
+        | StonkFunReplay
+        | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload ? payload.error : "StonkFun replay failed",
+        );
+      }
+
+      const envelope = {
+        ...stonkFunLaunchEnvelope(payload.launch),
+        seenAt: Date.now(),
+      };
+      setReplayIds((current) => {
+        const next = new Set(current);
+        next.add(launchKey(envelope));
+        return next;
+      });
+      setLaunches((current) =>
+        mergeLaunchEnvelopes(current, envelope, MAX_ROWS),
+      );
+
+      const replayUrl = new URL(window.location.href);
+      replayUrl.searchParams.set("replay", envelope.signature);
+      replayUrl.searchParams.set("source", envelope.source);
+      window.history.replaceState(null, "", replayUrl);
+
+      setStonkReplayState("ready");
+      void scanLaunch(envelope);
+
+      window.setTimeout(() => {
+        document
+          .getElementById("trench-take")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
+    } catch (error) {
+      setStonkReplayState("error");
+      setStonkReplayError(
+        error instanceof Error
+          ? error.message
+          : "Could not replay a real StonkFun launch",
+      );
+    }
+  }
+
   async function copyReplayLink() {
     if (!selected) return;
 
     const replayUrl = new URL(window.location.href);
     replayUrl.searchParams.set("replay", selected.signature);
+    replayUrl.searchParams.set("source", selected.source);
 
     try {
       await navigator.clipboard.writeText(replayUrl.toString());
@@ -257,15 +360,17 @@ export function LaunchFeed() {
   }
 
   async function copyTrenchBrief() {
-    if (!selected || !trenchBrief) return;
+    const pumpLaunch = selected ? pumpLaunchFromEnvelope(selected) : null;
+    if (!pumpLaunch || !trenchBrief) return;
 
     const replayUrl = new URL(window.location.href);
-    replayUrl.searchParams.set("replay", selected.signature);
+    replayUrl.searchParams.set("replay", pumpLaunch.signature);
+    replayUrl.searchParams.set("source", pumpLaunch.source);
 
     try {
       await navigator.clipboard.writeText(
         buildShareText({
-          launch: selected,
+          launch: pumpLaunch,
           brief: trenchBrief,
           replayUrl: replayUrl.toString(),
         }),
@@ -278,10 +383,11 @@ export function LaunchFeed() {
   }
 
   function exportProofPack() {
-    if (!selected || !snapshot || !trenchBrief) return;
+    const pumpLaunch = selected ? pumpLaunchFromEnvelope(selected) : null;
+    if (!pumpLaunch || !snapshot || !trenchBrief) return;
 
     const pack = buildProofPack({
-      launch: selected,
+      launch: pumpLaunch,
       snapshot,
       earlyBuyers,
       earlyRetention,
@@ -294,10 +400,10 @@ export function LaunchFeed() {
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
-    const safeSymbol = selected.symbol.replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "token";
+    const safeSymbol = pumpLaunch.symbol.replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "token";
 
     anchor.href = url;
-    anchor.download = `trenchscan-${safeSymbol}-${selected.mint.slice(0, 8)}.proof.json`;
+    anchor.download = `trenchscan-${safeSymbol}-${pumpLaunch.mint.slice(0, 8)}.proof.json`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -316,7 +422,7 @@ export function LaunchFeed() {
   async function checkEarlyRetention() {
     if (!selected || !earlyBuyers?.buyers.length) return;
 
-    const scanId = selected.id;
+    const scanId = launchKey(selected);
     setEarlyRetention(null);
     setRetentionError(null);
     setRetentionState("loading");
@@ -358,7 +464,7 @@ export function LaunchFeed() {
     }
   }
 
-  async function loadEarlyBuyers(launch: Launch) {
+  async function loadEarlyBuyers(launch: LaunchEnvelope) {
     try {
       const params = new URLSearchParams({
         fromSlot: String(launch.slot),
@@ -379,11 +485,11 @@ export function LaunchFeed() {
         );
       }
 
-      if (activeScan.current !== launch.id) return;
+      if (activeScan.current !== launchKey(launch)) return;
       setEarlyBuyers(payload);
       setEarlyState("ready");
     } catch (error) {
-      if (activeScan.current !== launch.id) return;
+      if (activeScan.current !== launchKey(launch)) return;
       setEarlyState("error");
       setEarlyError(
         error instanceof Error ? error.message : "Could not replay early buyers",
@@ -394,7 +500,7 @@ export function LaunchFeed() {
   async function traceFunding() {
     if (!selected || !earlyBuyers?.buyers.length) return;
 
-    const scanId = selected.id;
+    const scanId = launchKey(selected);
     setFundingTrace(null);
     setFundingError(null);
     setFundingState("loading");
@@ -438,7 +544,7 @@ export function LaunchFeed() {
   async function checkDevBaggage() {
     if (!selected) return;
 
-    const scanId = selected.id;
+    const scanId = launchKey(selected);
     setDevHistory(null);
     setDevError(null);
     setDevState("loading");
@@ -471,17 +577,13 @@ export function LaunchFeed() {
     }
   }
 
-  async function scanLaunch(launch: Launch) {
-    activeScan.current = launch.id;
-    setShareCopied(false);
-    setBriefCopied(false);
-    setSelected(launch);
+  function resetPumpAnalysis() {
     setSnapshot(null);
     setSnapshotError(null);
-    setSnapshotState("loading");
+    setSnapshotState("idle");
     setEarlyBuyers(null);
     setEarlyError(null);
-    setEarlyState("loading");
+    setEarlyState("idle");
     setEarlyRetention(null);
     setRetentionError(null);
     setRetentionState("idle");
@@ -491,6 +593,21 @@ export function LaunchFeed() {
     setDevHistory(null);
     setDevError(null);
     setDevState("idle");
+  }
+
+  async function scanLaunch(launch: LaunchEnvelope) {
+    activeScan.current = launchKey(launch);
+    setShareCopied(false);
+    setBriefCopied(false);
+    setSelected(launch);
+    resetPumpAnalysis();
+
+    if (launch.source === "stonkfun.xyz") {
+      return;
+    }
+
+    setSnapshotState("loading");
+    setEarlyState("loading");
     void loadEarlyBuyers(launch);
 
     try {
@@ -505,11 +622,11 @@ export function LaunchFeed() {
         throw new Error("error" in payload ? payload.error : "Snapshot failed");
       }
 
-      if (activeScan.current !== launch.id) return;
+      if (activeScan.current !== launchKey(launch)) return;
       setSnapshot(payload);
       setSnapshotState("ready");
     } catch (error) {
-      if (activeScan.current !== launch.id) return;
+      if (activeScan.current !== launchKey(launch)) return;
       setSnapshotState("error");
       setSnapshotError(
         error instanceof Error ? error.message : "Could not scan token",
@@ -518,7 +635,7 @@ export function LaunchFeed() {
   }
 
   const newestSignals = launches
-    .filter((launch) => !replayIds.has(launch.id))
+    .filter((launch) => !replayIds.has(launchKey(launch)))
     .slice(0, 5);
 
   const devHolder =
@@ -535,7 +652,7 @@ export function LaunchFeed() {
     earlyBuyers?.launchBlockTime ?? null,
   );
   const trenchBrief =
-    selected && snapshotState !== "loading"
+    selected?.source === "pump.fun" && snapshotState !== "loading"
       ? buildTrenchBrief({
           snapshot,
           earlyBuyers,
@@ -553,7 +670,7 @@ export function LaunchFeed() {
     devHistory !== null &&
     (!earlyBuyers?.buyers.length ||
       (fundingTrace !== null && earlyRetention !== null));
-  const evidenceCoverage = selected
+  const evidenceCoverage = selected?.source === "pump.fun"
     ? [
         { label: "LAUNCH", state: "ready" as SnapshotState },
         { label: "BAGS", state: snapshotState },
@@ -598,8 +715,8 @@ export function LaunchFeed() {
           </h1>
           <p className="subcopy">
             See fresh launches as they hit, who dropped them, and who is holding
-            the bag before you ape. Pump is live first. More pads come after we
-            nail the read.
+            the bag before you ape. Pump and StonkFun now land in one live feed,
+            while each launch keeps its own receipt semantics.
           </p>
           <div className="hero-actions">
             <a className="primary-cta" href="#fresh-trenches">START SCANNING →</a>
@@ -615,6 +732,16 @@ export function LaunchFeed() {
                 ? "LOADING VERIFIED TX…"
                 : "REPLAY VERIFIED TX"}
             </button>
+            <button
+              className="replay-cta stonkfun-replay-cta"
+              type="button"
+              onClick={() => void replayStonkFunLaunch()}
+              disabled={stonkReplayState === "loading"}
+            >
+              {stonkReplayState === "loading"
+                ? "LOADING STONKFUN TX…"
+                : "REPLAY STONKFUN TX"}
+            </button>
             <span className="hero-proof">
               caught live on mainnet · receipts visible · no magic score
             </span>
@@ -627,6 +754,17 @@ export function LaunchFeed() {
           {replayState === "ready" && (
             <div className="replay-message">
               Real on-chain launch loaded. Same decoder, same scan pipeline.
+            </div>
+          )}
+          {stonkReplayState === "error" && (
+            <div className="replay-message error">
+              Couldn&apos;t load StonkFun replay. {stonkReplayError}
+            </div>
+          )}
+          {stonkReplayState === "ready" && (
+            <div className="replay-message">
+              Real StonkFun launch loaded into the same feed. LaunchLab receipts
+              stay source-gated.
             </div>
           )}
         </div>
@@ -653,8 +791,11 @@ export function LaunchFeed() {
         </div>
         <div className="stat">
           <span>LAUNCHPADS</span>
-          <strong>PUMP <em>LIVE</em></strong>
-          <small>StonkFun decoder + replay probe built separately</small>
+          <strong>2 <em>UNIFIED</em></strong>
+          <small>
+            Pump {status.sources["pump.fun"].state} · StonkFun{" "}
+            {status.sources["stonkfun.xyz"].state}
+          </small>
         </div>
         <div className="stat">
           <span>DATA SOURCE</span>
@@ -668,7 +809,7 @@ export function LaunchFeed() {
           <div className="panel-head">
             <div>
               <span className="section-title">FRESH TRENCHES</span>
-              <span className="section-note">live Pump launches + server buffer · newest first</span>
+              <span className="section-note">live Pump + StonkFun launches · newest first</span>
             </div>
             <div className="legend">
               <span className="legend-dot" /> real-time
@@ -692,18 +833,18 @@ export function LaunchFeed() {
               <tbody>
                 {launches.map((launch) => (
                   <tr
-                    key={launch.id}
-                    data-selected={selected?.id === launch.id}
-                    data-replay={replayIds.has(launch.id)}
+                    key={launchKey(launch)}
+                    data-selected={selected ? launchKey(selected) === launchKey(launch) : false}
+                    data-replay={replayIds.has(launchKey(launch))}
                   >
                     <td className="mono age-cell">
-                      {replayIds.has(launch.id) ? "REPLAY" : ageLabel(launch.seenAt, now)}
+                      {replayIds.has(launchKey(launch)) ? "REPLAY" : ageLabel(launch.seenAt, now)}
                     </td>
                     <td>
                       <div className="token-cell">
                         <strong>
                           ${launch.symbol}
-                          {replayIds.has(launch.id) && (
+                          {replayIds.has(launchKey(launch)) && (
                             <em className="replay-chip">REAL TX</em>
                           )}
                         </strong>
@@ -711,7 +852,9 @@ export function LaunchFeed() {
                       </div>
                     </td>
                     <td>
-                      <span className="pad-chip">PUMP</span>
+                      <span className="pad-chip" data-source={launch.source}>
+                        {launchSourceLabel(launch.source)}
+                      </span>
                     </td>
                     <td className="mono">
                       <a
@@ -734,10 +877,16 @@ export function LaunchFeed() {
                       </a>
                     </td>
                     <td>
-                      {launch.isMayhemMode ? (
-                        <span className="chip warning">MAYHEM</span>
+                      {launch.venue.kind === "pump" ? (
+                        launch.venue.mayhemMode ? (
+                          <span className="chip warning">MAYHEM</span>
+                        ) : (
+                          <span className="chip">STD</span>
+                        )
+                      ) : launch.venue.rewardMode ? (
+                        <span className="chip warning">REWARD</span>
                       ) : (
-                        <span className="chip">STD</span>
+                        <span className="chip">LAUNCHLAB</span>
                       )}
                     </td>
                     <td className="mono">
@@ -755,7 +904,9 @@ export function LaunchFeed() {
                         type="button"
                         onClick={() => void scanLaunch(launch)}
                       >
-                        {selected?.id === launch.id && snapshotState === "loading"
+                        {selected && launchKey(selected) === launchKey(launch) &&
+                        launch.source === "pump.fun" &&
+                        snapshotState === "loading"
                           ? "READING…"
                           : "SCAN →"}
                       </button>
@@ -777,7 +928,7 @@ export function LaunchFeed() {
                   <span>
                     {status.state === "error"
                       ? status.message ?? "Connection failed."
-                      : "When Pump prints a new launch, it lands here."}
+                      : "When Pump or StonkFun prints a launch, it lands here."}
                   </span>
                 </div>
               </div>
@@ -795,7 +946,7 @@ export function LaunchFeed() {
               {newestSignals.length ? (
                 newestSignals.map((launch) => (
                   <a
-                    key={launch.id}
+                    key={launchKey(launch)}
                     className="mini-signal"
                     href={`https://solscan.io/tx/${launch.signature}`}
                     target="_blank"
@@ -805,7 +956,7 @@ export function LaunchFeed() {
                     <span>
                       <b>${launch.symbol} hit the trenches</b>
                       <small>
-                        Pump · {ageLabel(launch.seenAt, now)} · slot {launch.slot.toLocaleString()}
+                        {launchSourceLabel(launch.source)} · {ageLabel(launch.seenAt, now)} · slot {launch.slot.toLocaleString()}
                       </small>
                     </span>
                     <em>↗</em>
@@ -833,12 +984,12 @@ export function LaunchFeed() {
         </aside>
       </section>
 
-      {selected && (
+      {selected?.source === "pump.fun" && (
         <section className="scan-panel" id="trench-take" aria-live="polite">
           <div className="scan-heading">
             <div>
               <span className="eyebrow">
-                {replayIds.has(selected.id)
+                {replayIds.has(launchKey(selected))
                   ? "REPLAY SNAPSHOT // REAL ON-CHAIN TX"
                   : "TRENCH SNAPSHOT // DISTRIBUTION READ"}
               </span>
@@ -889,20 +1040,7 @@ export function LaunchFeed() {
                 onClick={() => {
                   activeScan.current = null;
                   setSelected(null);
-                  setSnapshot(null);
-                  setSnapshotState("idle");
-                  setEarlyBuyers(null);
-                  setEarlyState("idle");
-                  setEarlyError(null);
-                  setEarlyRetention(null);
-                  setRetentionState("idle");
-                  setRetentionError(null);
-                  setFundingTrace(null);
-                  setFundingState("idle");
-                  setFundingError(null);
-                  setDevHistory(null);
-                  setDevState("idle");
-                  setDevError(null);
+                  resetPumpAnalysis();
                   setShareCopied(false);
                   setBriefCopied(false);
                 }}
@@ -1675,11 +1813,22 @@ export function LaunchFeed() {
         </section>
       )}
 
-      <StonkFunPanel />
+      {selected?.source === "stonkfun.xyz" && (
+        <StonkFunPanel
+          launch={selected}
+          signature={selected.signature}
+          autoLoad
+          replay={replayIds.has(launchKey(selected))}
+          onClose={() => {
+            activeScan.current = null;
+            setSelected(null);
+          }}
+        />
+      )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.29 · built for trenchers · backed by chain data</span>
-        <span>live feed + real-launch replay · every signal stays receipt-backed</span>
+        <span>TrenchScan v0.30 · unified trenches · backed by chain data</span>
+        <span>Pump + StonkFun live · source-aware receipts · no semantic shortcuts</span>
       </footer>
     </main>
   );
