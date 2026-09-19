@@ -715,9 +715,9 @@ export function LaunchFeed() {
             <span> Less bullshit.</span>
           </h1>
           <p className="subcopy">
-            See fresh launches as they hit, who dropped them, and who is holding
-            the bag before you ape. Pump and StonkFun now land in one live feed,
-            while each launch keeps its own receipt semantics.
+            See fresh launches as they hit, then let receipt-backed qualification
+            cut the firehose down before you waste a click. Pump and StonkFun land
+            in one feed while every source keeps its own evidence semantics.
           </p>
           <div className="hero-actions">
             <a className="primary-cta" href="#fresh-trenches">START SCANNING →</a>
@@ -1708,8 +1708,8 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.30 · unified trenches · backed by chain data</span>
-        <span>Pump + StonkFun live · source-aware receipts · no semantic shortcuts</span>
+        <span>TrenchScan v0.31 · signal over noise · backed by chain data</span>
+        <span>qualified + watching + raw · source-aware receipts · no hidden score</span>
       </footer>
     </main>
   );
