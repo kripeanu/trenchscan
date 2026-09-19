@@ -11,6 +11,11 @@ import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, 
 
 const MAX_ROWS = 80;
 
+// This exact Pump launch was caught by TrenchScan's GitHub-hosted mainnet
+// runtime verification, then reproduced through exact-signature replay.
+const VERIFIED_MAINNET_DEMO_SIGNATURE =
+  "2G85yXGzDj9zr5RR3WTfyFExG7FR65ZK8rntp1gUYtTyMNG5STzDgGC43Qhsi8J2qQusYMvYf6DmUdC6rH4Hksq";
+
 function short(value: string, left = 5, right = 4) {
   if (value.length <= left + right + 3) return value;
   return `${value.slice(0, left)}…${value.slice(-right)}`;
@@ -600,14 +605,18 @@ export function LaunchFeed() {
             <button
               className="replay-cta"
               type="button"
-              onClick={() => void replayRealLaunch()}
+              onClick={() =>
+                void replayRealLaunch(VERIFIED_MAINNET_DEMO_SIGNATURE)
+              }
               disabled={replayState === "loading"}
             >
               {replayState === "loading"
-                ? "FINDING REAL LAUNCH…"
-                : "REPLAY REAL LAUNCH"}
+                ? "LOADING VERIFIED TX…"
+                : "REPLAY VERIFIED TX"}
             </button>
-            <span className="hero-proof">chain first · receipts visible · no magic score</span>
+            <span className="hero-proof">
+              caught live on mainnet · receipts visible · no magic score
+            </span>
           </div>
           {replayState === "error" && (
             <div className="replay-message error">
@@ -644,7 +653,7 @@ export function LaunchFeed() {
         <div className="stat">
           <span>LAUNCHPADS</span>
           <strong>PUMP <em>LIVE</em></strong>
-          <small>more pads loading after v1</small>
+          <small>StonkFun decoder + replay probe built separately</small>
         </div>
         <div className="stat">
           <span>DATA SOURCE</span>
@@ -1666,7 +1675,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.22 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.23 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
