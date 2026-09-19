@@ -28,19 +28,19 @@ type LaunchTableProps = {
 };
 
 function launchKey(launch: Pick<LaunchEnvelope, "source" | "id">) {
-  return \`${launch.source}:${launch.id}\`;
+  return `${launch.source}:${launch.id}`;
 }
 
 function ageLabel(timestamp: number, now: number) {
   const seconds = Math.max(0, Math.floor((now - timestamp) / 1000));
-  if (seconds < 60) return \`${seconds}s\`;
+  if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return \`${minutes}m\`;
-  return \`${Math.floor(minutes / 60)}h\`;
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h`;
 }
 
 function pct(value: number | null) {
-  return value === null ? "—" : \`${value.toFixed(1)}%\`;
+  return value === null ? "—" : `${value.toFixed(1)}%`;
 }
 
 function statusLabel(state: FeedQualificationState) {
@@ -87,11 +87,11 @@ async function loadPumpEvidence(
   });
 
   const [snapshotResult, earlyResult] = await Promise.allSettled([
-    fetch(\`/api/snapshot/${launch.mint}\`, { cache: "no-store" }).then(
+    fetch(`/api/snapshot/${launch.mint}`, { cache: "no-store" }).then(
       (response) => responseJson<TokenSnapshot>(response),
     ),
     fetch(
-      \`/api/early-buyers/${launch.mint}?${params.toString()}\`,
+      `/api/early-buyers/${launch.mint}?${params.toString()}`,
       { cache: "no-store" },
     ).then((response) => responseJson<EarlyBuyerScan>(response)),
   ]);
@@ -120,7 +120,7 @@ async function loadStonkEvidence(
 ): Promise<FeedEvidence> {
   try {
     const response = await fetch(
-      \`/api/stonkfun/analyze/${launch.signature}\`,
+      `/api/stonkfun/analyze/${launch.signature}`,
       { cache: "no-store" },
     );
     const analysis = await responseJson<StonkFunAnalysis>(response);
@@ -427,7 +427,7 @@ export function LaunchTable({
                         sampled accts
                         {evidence?.top1ExternalPct !== null &&
                         evidence?.top1ExternalPct !== undefined
-                          ? \` · top1 ${pct(evidence.top1ExternalPct)}\`
+                          ? ` · top1 ${pct(evidence.top1ExternalPct)}`
                           : ""}
                       </span>
                     </div>
@@ -458,7 +458,7 @@ export function LaunchTable({
                       </button>
                       <a
                         className="row-explorer-link"
-                        href={\`https://solscan.io/token/${launch.mint}\`}
+                        href={`https://solscan.io/token/${launch.mint}`}
                         target="_blank"
                         rel="noreferrer"
                         title="Open token on Solscan"
