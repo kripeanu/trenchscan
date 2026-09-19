@@ -1,3 +1,4 @@
+import { buildSameSlotClusters } from "./early-timing";
 import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, TokenSnapshot } from "./types";
 
 export type BriefTone = "good" | "neutral" | "warning" | "danger";
@@ -54,6 +55,18 @@ export function buildTrenchBrief(input: {
         ? "Combined supply grabbed by the first decoded external wallets."
         : "Combined supply in our sampled early window; launch boundary was not reached.",
       tone: earlyConcentration >= 40 ? "danger" : earlyConcentration >= 25 ? "warning" : "neutral",
+    });
+  }
+
+  const sameSlotClusters = buildSameSlotClusters(earlyBuyers);
+  const largestSameSlot = sameSlotClusters[0] ?? null;
+
+  if (largestSameSlot) {
+    signals.push({
+      label: "SAME SLOT?",
+      value: `${largestSameSlot.buyerCount} WALLETS`,
+      detail: `${largestSameSlot.buyerCount} decoded early wallets landed in exact slot ${largestSameSlot.slot}. Timing clue only — not proof of a Jito bundle or common control.`,
+      tone: largestSameSlot.buyerCount >= 4 ? "warning" : "neutral",
     });
   }
 
@@ -183,6 +196,9 @@ export function buildTrenchBrief(input: {
   const bottom: string[] = [];
   if (top10 !== null) bottom.push(`Top 10 external bags sit at ${pct(top10)}.`);
   if (earlyConcentration !== null) bottom.push(`Decoded early wallets account for ${pct(earlyConcentration)} of supply in this read.`);
+  if (largestSameSlot) {
+    bottom.push(`${largestSameSlot.buyerCount} decoded early wallets landed in exact slot ${largestSameSlot.slot}.`);
+  }
   if (earlyRetention) {
     const dumpedMost = earlyRetention.jeetedCount + earlyRetention.mostlyJeetedCount;
     bottom.push(`${dumpedMost}/${earlyRetention.walletsChecked} checked early wallets now hold under 20% of their first decoded grab.`);
