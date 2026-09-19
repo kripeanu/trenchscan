@@ -4,13 +4,14 @@ import {
   type ConfirmedSignatureInfo,
   type ParsedTransactionWithMeta,
 } from "@solana/web3.js";
-import { derivePumpCurveAccounts } from "@/lib/snapshot";
+import { derivePumpBondingCurve } from "@/lib/snapshot";
+import { MAX_SUPPORTED_TRANSACTION_VERSION, withRpcRetry } from "@/lib/rpc";
 import type { EarlyBuyerRow, EarlyBuyerScan } from "@/lib/types";
 
 const SIGNATURE_PAGE_SIZE = 100;
 const MAX_SIGNATURE_PAGES = 3;
 const MAX_PARSED_SIGNATURES = 60;
-const PARSE_BATCH_SIZE = 20;
+const PARSE_BATCH_SIZE = 8;
 
 type BalanceRow = {
   mint: string;
@@ -132,12 +133,14 @@ async function parseTransactions(
 
   for (let index = 0; index < signatures.length; index += PARSE_BATCH_SIZE) {
     const chunk = signatures.slice(index, index + PARSE_BATCH_SIZE);
-    const transactions = await connection.getParsedTransactions(
-      chunk.map((row) => row.signature),
-      {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      },
+    const transactions = await withRpcRetry(() =>
+      connection.getParsedTransactions(
+        chunk.map((row) => row.signature),
+        {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+        },
+      ),
     );
 
     transactions.forEach((tx, chunkIndex) => {
@@ -164,10 +167,10 @@ export async function buildEarlyBuyerScan(
 ): Promise<EarlyBuyerScan> {
   const mint = new PublicKey(mintAddress);
   const creator = creatorAddress ? new PublicKey(creatorAddress).toBase58() : null;
-  const { bondingCurve } = derivePumpCurveAccounts(mint);
+  const bondingCurve = derivePumpBondingCurve(mint);
 
   const [supplyResponse, launchBlockTime, history] = await Promise.all([
-    connection.getTokenSupply(mint, "confirmed"),
+    withRpcRetry(() => connection.getTokenSupply(mint, "confirmed")),
     connection.getBlockTime(launchSlot).catch(() => null),
     collectCurveSignatures(
       connection,
