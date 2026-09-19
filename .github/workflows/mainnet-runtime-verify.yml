@@ -47,44 +47,61 @@ jobs:
         env:
           SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
 
-      - name: Find and decode a real Pump launch
+      - name: Catch a real live Pump launch
         run: |
-          success=0
+          : > /tmp/stream.txt
 
-          for attempt in $(seq 1 5); do
-            code=$(curl --silent --show-error --max-time 90               -o /tmp/replay.json               -w "%{http_code}"               http://127.0.0.1:3000/api/replay || true)
+          curl --silent --show-error --no-buffer --max-time 150             http://127.0.0.1:3000/api/stream > /tmp/stream.txt &
+          stream_pid=$!
 
-            echo "Replay attempt $attempt -> HTTP $code"
+          launch_json=""
 
-            if [ "$code" = "200" ] && jq -e               '.launch.signature and .launch.mint and .launch.creator and .launch.symbol and .launch.bondingCurve'               /tmp/replay.json > /dev/null; then
-              success=1
+          for attempt in $(seq 1 120); do
+            launch_json=$(awk '
+              /^event: launch$/ { found=1; next }
+              found && /^data: / {
+                sub(/^data: /, "")
+                print
+                exit
+              }
+            ' /tmp/stream.txt)
+
+            if [ -n "$launch_json" ]; then
               break
             fi
 
-            cat /tmp/replay.json 2>/dev/null || true
-            sleep $((attempt * 4))
+            sleep 1
           done
 
-          if [ "$success" != "1" ]; then
-            echo "Could not decode a recent real Pump create_v2 launch."
+          kill "$stream_pid" 2>/dev/null || true
+          wait "$stream_pid" 2>/dev/null || true
+
+          if [ -z "$launch_json" ]; then
+            echo "No live Pump launch arrived inside the verification window."
+            echo "=== SSE TAIL ==="
+            tail -n 80 /tmp/stream.txt || true
             echo "=== SERVER LOG ==="
             tail -n 200 /tmp/trenchscan-server.log || true
             exit 1
           fi
 
-          echo "=== REAL LAUNCH ==="
-          jq '{
-            signature: .launch.signature,
-            slot: .launch.slot,
-            symbol: .launch.symbol,
-            name: .launch.name,
-            mint: .launch.mint,
-            creator: .launch.creator,
-            bondingCurve: .launch.bondingCurve,
-            associatedBondingCurve: .launch.associatedBondingCurve
-          }' /tmp/replay.json
+          printf '%s\n' "$launch_json" > /tmp/live-launch.json
 
-          signature=$(jq -r '.launch.signature' /tmp/replay.json)
+          jq -e             '.signature and .mint and .creator and .symbol and .bondingCurve and .associatedBondingCurve'             /tmp/live-launch.json > /dev/null
+
+          echo "=== LIVE LAUNCH ==="
+          jq '{
+            signature,
+            slot,
+            symbol,
+            name,
+            mint,
+            creator,
+            bondingCurve,
+            associatedBondingCurve
+          }' /tmp/live-launch.json
+
+          signature=$(jq -r '.signature' /tmp/live-launch.json)
           echo "LAUNCH_SIGNATURE=$signature" >> "$GITHUB_ENV"
 
       - name: Run the full receipt-backed analysis
