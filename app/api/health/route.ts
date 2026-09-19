@@ -1,6 +1,7 @@
 import { createSolanaConnection } from "@/lib/pump";
 import { getLaunchHub } from "@/lib/launch-hub";
 import { getEvidenceCache } from "@/lib/evidence-cache";
+import { getStonkFunLaunchHub } from "@/lib/stonkfun-launch-hub";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export async function GET() {
   const started = Date.now();
   const connection = createSolanaConnection();
   const hub = getLaunchHub();
+  const stonkFunHub = getStonkFunLaunchHub();
 
   try {
     const [slot, blockHeight] = await Promise.all([
@@ -26,6 +28,7 @@ export async function GET() {
           blockHeight,
         },
         listener: hub.diagnostics(),
+        stonkFunListener: stonkFunHub.diagnostics(),
         evidenceCache: getEvidenceCache().stats(),
       },
       {
@@ -41,6 +44,7 @@ export async function GET() {
         checkedAt: Date.now(),
         rpcLatencyMs: Math.max(0, Date.now() - started),
         listener: hub.diagnostics(),
+        stonkFunListener: stonkFunHub.diagnostics(),
         evidenceCache: getEvidenceCache().stats(),
         error: error instanceof Error ? error.message : "Unknown RPC error",
       },
