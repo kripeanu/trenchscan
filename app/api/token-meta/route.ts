@@ -1,3 +1,4 @@
+import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
 export const runtime = "nodejs";
@@ -5,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const MAX_METADATA_BYTES = 512_000;
 const TIMEOUT_MS = 4_500;
+const MAX_REDIRECTS = 2;
 
 function normalizeContentUri(value: string) {
   const trimmed = value.trim();
@@ -38,7 +40,28 @@ function privateIpv4(host: string) {
   );
 }
 
-function safePublicUrl(value: string) {
+function privateIpv6(host: string) {
+  const normalized = host.toLowerCase();
+  return (
+    normalized === "::1" ||
+    normalized === "::" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe8") ||
+    normalized.startsWith("fe9") ||
+    normalized.startsWith("fea") ||
+    normalized.startsWith("feb")
+  );
+}
+
+function privateIp(host: string) {
+  const version = isIP(host);
+  if (version === 4) return privateIpv4(host);
+  if (version === 6) return privateIpv6(host);
+  return false;
+}
+
+function parsedPublicUrl(value: string) {
   let url: URL;
 
   try {
@@ -54,22 +77,8 @@ function safePublicUrl(value: string) {
   if (
     host === "localhost" ||
     host.endsWith(".localhost") ||
-    host.endsWith(".local")
-  ) {
-    return null;
-  }
-
-  const ipVersion = isIP(host);
-  if (ipVersion === 4 && privateIpv4(host)) return null;
-  if (
-    ipVersion === 6 &&
-    (host === "::1" ||
-      host.startsWith("fc") ||
-      host.startsWith("fd") ||
-      host.startsWith("fe8") ||
-      host.startsWith("fe9") ||
-      host.startsWith("fea") ||
-      host.startsWith("feb"))
+    host.endsWith(".local") ||
+    privateIp(host)
   ) {
     return null;
   }
@@ -77,18 +86,66 @@ function safePublicUrl(value: string) {
   return url;
 }
 
-async function fetchMetadata(url: URL) {
+async function publicNetworkUrl(value: string, base?: URL) {
+  let url: URL;
+
+  try {
+    url = base
+      ? new URL(value, base)
+      : parsedPublicUrl(value) ?? new URL("about:blank");
+  } catch {
+    return null;
+  }
+
+  if (url.protocol === "about:") return null;
+
+  const parsed = parsedPublicUrl(url.toString());
+  if (!parsed) return null;
+
+  if (!isIP(parsed.hostname)) {
+    try {
+      const addresses = await lookup(parsed.hostname, {
+        all: true,
+        verbatim: true,
+      });
+
+      if (!addresses.length || addresses.some((row) => privateIp(row.address))) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return parsed;
+}
+
+async function fetchMetadata(url: URL, redirects = 0): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
       signal: controller.signal,
-      redirect: "error",
+      redirect: "manual",
       headers: {
         Accept: "application/json,text/plain;q=0.8,*/*;q=0.1",
       },
     });
+
+    if (
+      response.status >= 300 &&
+      response.status < 400 &&
+      response.headers.get("location") &&
+      redirects < MAX_REDIRECTS
+    ) {
+      const next = await publicNetworkUrl(
+        response.headers.get("location")!,
+        url,
+      );
+      if (!next) throw new Error("unsafe metadata redirect");
+      return fetchMetadata(next, redirects + 1);
+    }
 
     if (!response.ok) throw new Error("metadata fetch failed");
 
@@ -117,7 +174,7 @@ export async function GET(request: Request) {
     return Response.json({ image: null }, { status: 400 });
   }
 
-  const metadataUrl = safePublicUrl(uri);
+  const metadataUrl = await publicNetworkUrl(normalizeContentUri(uri));
   if (!metadataUrl) {
     return Response.json({ image: null }, { status: 400 });
   }
@@ -131,7 +188,9 @@ export async function GET(request: Request) {
           ? metadata.image_url
           : null;
 
-    const imageUrl = rawImage ? safePublicUrl(rawImage) : null;
+    const imageUrl = rawImage
+      ? await publicNetworkUrl(normalizeContentUri(rawImage))
+      : null;
 
     return Response.json(
       {
