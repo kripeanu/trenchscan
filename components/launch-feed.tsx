@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FundingMap } from "@/components/funding-map";
+import { buildSameSlotClusters } from "@/lib/early-timing";
 import { TrenchBrand } from "@/components/trench-brand";
 import { buildTrenchBrief } from "@/lib/trench-brief";
 import { buildProofPack, buildShareText } from "@/lib/proof-pack";
@@ -514,6 +515,7 @@ export function LaunchFeed() {
     snapshot && devHolder
       ? totalSupplyPct(devHolder.uiAmount, snapshot.uiSupply)
       : null;
+  const sameSlotClusters = buildSameSlotClusters(earlyBuyers);
   const trenchBrief = snapshot
     ? buildTrenchBrief({
         snapshot,
@@ -1030,6 +1032,69 @@ export function LaunchFeed() {
                       </div>
                     )}
 
+                    {sameSlotClusters.length > 0 && (
+                      <section className="timing-block">
+                        <div className="timing-head">
+                          <div>
+                            <strong>SAME SLOT CREW</strong>
+                            <span>
+                              exact-slot timing clusters from decoded early wallets
+                            </span>
+                          </div>
+                          <em>
+                            {sameSlotClusters.reduce(
+                              (sum, cluster) => sum + cluster.buyerCount,
+                              0,
+                            )}{" "}
+                            HITS
+                          </em>
+                        </div>
+
+                        <div className="timing-grid">
+                          {sameSlotClusters.slice(0, 4).map((cluster) => (
+                            <article className="timing-card" key={cluster.slot}>
+                              <div className="timing-card-head">
+                                <span>SLOT {cluster.slot.toLocaleString()}</span>
+                                <strong>{cluster.buyerCount} WALLETS</strong>
+                              </div>
+                              <div className="timing-card-meta">
+                                <span>
+                                  {cluster.secondsAfterLaunch === null
+                                    ? "timing unknown"
+                                    : afterLaunchLabel(cluster.secondsAfterLaunch)}
+                                </span>
+                                <span>
+                                  {cluster.combinedSupplyPct === null
+                                    ? "supply unknown"
+                                    : `${pct(cluster.combinedSupplyPct)} combined`}
+                                </span>
+                              </div>
+                              <div className="timing-wallets">
+                                {cluster.buyers.slice(0, 5).map((wallet, index) => (
+                                  <a
+                                    key={wallet}
+                                    href={`https://solscan.io/account/${wallet}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={wallet}
+                                  >
+                                    <span>{short(wallet)}</span>
+                                    <em>tx {index + 1}</em>
+                                  </a>
+                                ))}
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+
+                        <div className="timing-caveat">
+                          TIMING, NOT A BUNDLE CLAIM: same-slot buys can come from bots,
+                          organic competition, or coordinated actors. TrenchScan only says
+                          what the chain proves here — exact-slot activity.
+                        </div>
+                      </section>
+                    )}
+
                     {earlyBuyers.buyers.length > 0 && (
                       <section className="retention-block">
                         <div className="retention-head">
@@ -1498,7 +1563,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.14 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.15 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>

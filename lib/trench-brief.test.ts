@@ -162,6 +162,26 @@ describe("buildTrenchBrief", () => {
     expect(signal?.detail).toContain("Relationship clue, not ownership proof");
   });
 
+  it("surfaces same-slot timing without calling it a bundle", () => {
+    const earlyScan = early([2, 2, 2, 2]);
+    earlyScan.buyers.forEach((buyer) => {
+      buyer.slot = 777;
+    });
+
+    const brief = buildTrenchBrief({
+      snapshot: snapshot(40),
+      earlyBuyers: earlyScan,
+      fundingTrace: null,
+      devHistory: null,
+      devBagPct: null,
+    });
+
+    const signal = brief.signals.find((row) => row.label === "SAME SLOT?");
+    expect(signal?.value).toBe("4 WALLETS");
+    expect(signal?.tone).toBe("warning");
+    expect(signal?.detail).toContain("not proof of a Jito bundle");
+  });
+
   it("surfaces early wallets that already dumped most of the first decoded grab", () => {
     const brief = buildTrenchBrief({
       snapshot: snapshot(42),
