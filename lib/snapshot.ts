@@ -138,16 +138,11 @@ export function computeDistributionMath(
  * LaunchLab/StonkFun passes its base vault. TrenchScan never guesses that a
  * protocol vault is a whale.
  */
-export async function buildExternalDistributionSnapshot(
+async function buildExternalDistributionSnapshotForMint(
   connection: Connection,
-  mintAddress: string,
+  mint: PublicKey,
   exclusions: DistributionExclusion[],
 ): Promise<TokenDistributionSnapshot> {
-  const mint = new PublicKey(mintAddress);
-
-  // Validate the mint owner before applying SPL/Token-2022 account layout.
-  await resolveMintTokenProgram(connection, mint);
-
   const supplyResponse = await withRpcRetry(() =>
     connection.getTokenSupply(mint, "confirmed"),
   );
@@ -246,6 +241,23 @@ export async function buildExternalDistributionSnapshot(
   };
 }
 
+export async function buildExternalDistributionSnapshot(
+  connection: Connection,
+  mintAddress: string,
+  exclusions: DistributionExclusion[],
+): Promise<TokenDistributionSnapshot> {
+  const mint = new PublicKey(mintAddress);
+
+  // Validate the mint owner before applying SPL/Token-2022 account layout.
+  await resolveMintTokenProgram(connection, mint);
+
+  return buildExternalDistributionSnapshotForMint(
+    connection,
+    mint,
+    exclusions,
+  );
+}
+
 export async function buildTokenSnapshot(
   connection: Connection,
   mintAddress: string,
@@ -257,9 +269,9 @@ export async function buildTokenSnapshot(
     tokenProgram,
   );
 
-  const distribution = await buildExternalDistributionSnapshot(
+  const distribution = await buildExternalDistributionSnapshotForMint(
     connection,
-    mint.toBase58(),
+    mint,
     [
       {
         tokenAccount: associatedBondingCurve,
