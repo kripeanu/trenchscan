@@ -54,20 +54,19 @@ export async function loadStonkFunReplayBySignature(
 
   if (!transaction || transaction.meta?.err) return null;
 
+  const blockTime = transaction.blockTime ?? null;
   const launch = decodeStonkFunLaunchFromTransaction(
     transaction,
     signature,
     transaction.slot,
-    transaction.blockTime !== null
-      ? transaction.blockTime * 1000
-      : Date.now(),
+    blockTime !== null ? blockTime * 1000 : Date.now(),
   );
 
   if (!launch) return null;
 
   return {
     launch,
-    launchBlockTime: transaction.blockTime ?? null,
+    launchBlockTime: blockTime,
     replayedAt: Date.now(),
   };
 }
