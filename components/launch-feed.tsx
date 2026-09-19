@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FundingMap } from "@/components/funding-map";
+import { buildDevCadence } from "@/lib/dev-cadence";
 import { buildSameSlotClusters } from "@/lib/early-timing";
 import { TrenchBrand } from "@/components/trench-brand";
 import { buildTrenchBrief } from "@/lib/trench-brief";
@@ -516,6 +517,10 @@ export function LaunchFeed() {
       ? totalSupplyPct(devHolder.uiAmount, snapshot.uiSupply)
       : null;
   const sameSlotClusters = buildSameSlotClusters(earlyBuyers);
+  const devCadence = buildDevCadence(
+    devHistory,
+    earlyBuyers?.launchBlockTime ?? null,
+  );
   const trenchBrief = snapshot
     ? buildTrenchBrief({
         snapshot,
@@ -1412,7 +1417,46 @@ export function LaunchFeed() {
                       <span>
                         <b>{devHistory.transactionsParsed}</b> TX PARSED
                       </span>
+                      {devCadence && devCadence.launchBlockTime !== null && (
+                        <>
+                          <span>
+                            <b>{devCadence.within1h}</b> IN 1H
+                          </span>
+                          <span>
+                            <b>{devCadence.within24h}</b> IN 24H
+                          </span>
+                        </>
+                      )}
                     </div>
+
+                    {devCadence && devCadence.launchBlockTime !== null && (
+                      <div className="dev-cadence-strip">
+                        <div data-hot={devCadence.within1h >= 3}>
+                          <span>1H BURST</span>
+                          <strong>{devCadence.within1h}</strong>
+                          <small>prior creates</small>
+                        </div>
+                        <div data-hot={devCadence.within24h >= 5}>
+                          <span>24H BURST</span>
+                          <strong>{devCadence.within24h}</strong>
+                          <small>prior creates</small>
+                        </div>
+                        <div>
+                          <span>7D SAMPLE</span>
+                          <strong>{devCadence.within7d}</strong>
+                          <small>prior creates</small>
+                        </div>
+                        <div>
+                          <span>FASTEST GAP</span>
+                          <strong>
+                            {devCadence.shortestGapSeconds === null
+                              ? "—"
+                              : beforeLaunchLabel(devCadence.shortestGapSeconds)}
+                          </strong>
+                          <small>between sampled creates</small>
+                        </div>
+                      </div>
+                    )}
 
                     {devHistory.priorLaunches.length ? (
                       <div className="dev-launch-grid">
@@ -1571,7 +1615,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.16 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.17 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>

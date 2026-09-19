@@ -205,6 +205,31 @@ describe("buildTrenchBrief", () => {
     expect(brief.bottomLine).toContain("4/6 checked early wallets");
   });
 
+  it("surfaces bursty creator cadence without calling prior launches rugs", () => {
+    const current = 10_000;
+    const earlyScan = early([2, 2, 2]);
+    earlyScan.launchBlockTime = current;
+    const devHistory = dev(3);
+    devHistory.priorLaunches = devHistory.priorLaunches.map((launch, index) => ({
+      ...launch,
+      blockTime: current - [300, 1200, 2500][index],
+    }));
+
+    const brief = buildTrenchBrief({
+      snapshot: snapshot(40),
+      earlyBuyers: earlyScan,
+      fundingTrace: funding(1),
+      devHistory,
+      devBagPct: 1,
+    });
+
+    const signal = brief.signals.find((row) => row.label === "DEV CADENCE");
+    expect(signal?.value).toBe("3 IN 1H");
+    expect(signal?.tone).toBe("warning");
+    expect(signal?.detail).toContain("prior creates");
+    expect(signal?.detail).not.toContain("rug");
+  });
+
   it("does not pretend a partial early window is complete", () => {
     const brief = buildTrenchBrief({
       snapshot: snapshot(40),
