@@ -206,11 +206,29 @@ The endpoint now requires only a valid launch receipt. Every downstream evidence
 
 The token header exposes this as **FULL JSON**. The scan UI also shows **RECEIPT COVERAGE** so a trader or judge can distinguish `RECEIPT`, `DIGGING`, `NOT RUN` and `RPC BLOCKED` instead of seeing one vague spinner or failure.
 
+### StonkFun / LaunchLab adapter groundwork
+
+TrenchScan now has an isolated decoder for StonkFun launches that use Raydium LaunchLab.
+
+The adapter:
+
+- requires the Raydium LaunchLab program id
+- requires one of StonkFun's known `platform_config` accounts before assigning the StonkFun label
+- supports both LaunchLab `initialize_v2` and `initialize_with_token_2022`
+- decodes the documented `MintParams` fields: decimals, name, symbol and URI
+- retains creator, payer, pool state, base mint, quote mint, vaults and token programs
+- distinguishes standard vs reward-mode platform config
+
+This is intentionally **decoder groundwork, not live multi-launchpad support yet**. The current UI still runs Pump-specific holder / curve / early-buyer semantics, so StonkFun will not be wired into the shared feed until those source-specific assumptions are split cleanly.
+
+That keeps the expansion honest: matching generic LaunchLab traffic is not enough to call something StonkFun.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
-- launchpad adapter work after the Pump v1 path is runtime-verified
-- additional Solana launchpads after the Pump v1 path is stable
+- live-wire the verified StonkFun adapter behind source-specific evidence semantics
+- verify StonkFun launch decoding against real mainnet transactions
+- additional Solana launchpads after the Pump path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
 
@@ -248,4 +266,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.20 — evidence cache + duplicate RPC coalescing`
+`v0.21 — StonkFun / LaunchLab decoder groundwork`
