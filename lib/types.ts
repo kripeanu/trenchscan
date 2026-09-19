@@ -76,6 +76,7 @@ export type FundingBuyerInput = {
 };
 
 export type WalletHistoryClass =
+  | "no-prior-history"
   | "fresh-1h"
   | "fresh-24h"
   | "established"
