@@ -25,7 +25,7 @@ function compact(value: number | null) {
 }
 
 function coverageCopy(value: "receipt" | "rpc-blocked") {
-  return value === "receipt" ? "RECEIPT" : "RPC BLOCKED";
+  return value === "receipt" ? "RECEIPT" : "DATA DELAYED";
 }
 
 type PanelState = "idle" | "loading" | "ready" | "error";
@@ -238,7 +238,7 @@ export function StonkFunPanel({
                 </>
               ) : (
                 <div className="stonkfun-layer-blocked">
-                  BAG MAP RPC BLOCKED
+                  BAG MAP DATA DELAYED
                   <small>
                     Launch receipt remains valid. No holder percentages were inferred.
                   </small>
@@ -285,7 +285,7 @@ export function StonkFunPanel({
                 </>
               ) : (
                 <div className="stonkfun-layer-blocked">
-                  EARLY CREW RPC BLOCKED
+                  EARLY CREW DATA DELAYED
                   <small>
                     TrenchScan will not reuse Pump buyer semantics as a fallback.
                   </small>
