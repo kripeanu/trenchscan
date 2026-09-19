@@ -153,6 +153,24 @@ The Trench Brief can now be copied as compact trench-native text with the replay
 That means a result can be shared without hiding how TrenchScan got there.
 
 
+
+### Runtime health
+
+`GET /api/health` provides a deployment/debug health check without exposing RPC credentials.
+
+It reports:
+
+- confirmed Solana slot + block height
+- RPC round-trip latency
+- shared launch-listener state
+- whether the websocket subscription is active
+- buffered launch count
+- connected SSE listener count
+- last observed launch / last listener error timestamps
+- process uptime for the in-memory launch hub
+
+This gives us a fast way to diagnose Railway/RPC issues during demos instead of guessing whether a blank feed is frontend, SSE, websocket or RPC related.
+
 ### One-call analysis API
 
 `GET /api/analyze/<launch-transaction-signature>` runs the same evidence pipeline from one exact Pump launch transaction and returns a machine-readable analysis bundle.
@@ -212,4 +230,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.17 — creator launch cadence + burst context`
+`v0.18 — runtime health + launch-listener diagnostics`
