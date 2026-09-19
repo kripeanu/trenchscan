@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TrenchBrand } from "@/components/trench-brand";
 import { buildTrenchBrief } from "@/lib/trench-brief";
+import { buildProofPack, buildShareText } from "@/lib/proof-pack";
 import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, Launch, ReplayLaunch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
@@ -114,6 +115,7 @@ export function LaunchFeed() {
   const [replayState, setReplayState] = useState<SnapshotState>("idle");
   const [replayError, setReplayError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [briefCopied, setBriefCopied] = useState(false);
   const activeScan = useRef<string | null>(null);
 
   useEffect(() => {
@@ -233,6 +235,53 @@ export function LaunchFeed() {
     } catch {
       setShareCopied(false);
     }
+  }
+
+  async function copyTrenchBrief() {
+    if (!selected || !trenchBrief) return;
+
+    const replayUrl = new URL(window.location.href);
+    replayUrl.searchParams.set("replay", selected.signature);
+
+    try {
+      await navigator.clipboard.writeText(
+        buildShareText({
+          launch: selected,
+          brief: trenchBrief,
+          replayUrl: replayUrl.toString(),
+        }),
+      );
+      setBriefCopied(true);
+      window.setTimeout(() => setBriefCopied(false), 1800);
+    } catch {
+      setBriefCopied(false);
+    }
+  }
+
+  function exportProofPack() {
+    if (!selected || !snapshot || !trenchBrief) return;
+
+    const pack = buildProofPack({
+      launch: selected,
+      snapshot,
+      earlyBuyers,
+      fundingTrace,
+      devHistory,
+      trenchBrief,
+    });
+    const blob = new Blob([JSON.stringify(pack, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const safeSymbol = selected.symbol.replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "token";
+
+    anchor.href = url;
+    anchor.download = `trenchscan-${safeSymbol}-${selected.mint.slice(0, 8)}.proof.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   function runFullReceiptPass() {
@@ -357,6 +406,7 @@ export function LaunchFeed() {
   async function scanLaunch(launch: Launch) {
     activeScan.current = launch.id;
     setShareCopied(false);
+    setBriefCopied(false);
     setSelected(launch);
     setSnapshot(null);
     setSnapshotError(null);
@@ -746,6 +796,7 @@ export function LaunchFeed() {
                   setDevState("idle");
                   setDevError(null);
                   setShareCopied(false);
+                  setBriefCopied(false);
                 }}
               >
                 CLOSE ×
@@ -1255,6 +1306,21 @@ export function LaunchFeed() {
                     )}
                   </div>
 
+                  <div className="take-actions">
+                    <button
+                      type="button"
+                      onClick={() => void copyTrenchBrief()}
+                    >
+                      {briefCopied ? "BRIEF COPIED ✓" : "COPY BRIEF"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportProofPack}
+                    >
+                      EXPORT PROOF JSON
+                    </button>
+                  </div>
+
                   <div className="take-list">
                     {trenchBrief?.signals.map((signal) => (
                       <div key={signal.label} data-tone={signal.tone}>
@@ -1285,7 +1351,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.11 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.12 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
