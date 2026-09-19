@@ -50,6 +50,22 @@ For each decoded early wallet TrenchScan shows:
 
 The replay is deliberately bounded. If RPC history does not reach the launch boundary, the UI says **PARTIAL WINDOW** instead of pretending those wallets were literally first.
 
+### Same-slot crew
+
+The early-buyer replay also groups wallets that received positive token balance deltas in the **exact same Solana slot**.
+
+For each cluster TrenchScan shows:
+
+- slot number
+- wallet count
+- combined decoded supply share
+- timing after launch
+- the wallets involved, with explorer links
+
+This is deliberately called a **timing clue**, not a Jito bundle detector. Same-slot activity can come from bots, organic competition, or coordinated actors, so TrenchScan does not upgrade it into a stronger claim without separate evidence.
+
+The largest exact-slot cluster is also surfaced in the Trench Brief as **SAME SLOT?**.
+
 ### Who jeeted?
 
 From the decoded early-wallet set, TrenchScan can compare each wallet's first positive token delta with what that wallet holds **now**.
@@ -176,4 +192,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.14 — early-buyer retention / Who Jeeted evidence layer`
+`v0.15 — exact-slot early activity + Who Jeeted retention`
