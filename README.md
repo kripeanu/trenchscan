@@ -227,6 +227,16 @@ This is intentionally **decoder groundwork, not live multi-launchpad support yet
 
 That keeps the expansion honest: matching generic LaunchLab traffic is not enough to call something StonkFun.
 
+The adapter is now **mainnet-verified** against an exact StonkFun LaunchLab receipt, independently located from token history and then reproduced by signature:
+
+- **RRM — Raydium Rewards Mode**
+- mint `AC4EmomN4MSoTu4eYPKERgspY6LEoN6kHvETCG61STNK`
+- LaunchLab `initialize_with_token_2022`
+- StonkFun reward platform config `6BwHHDg3u1854jC8PDLXvR4spTcLNaoBxLJNGC4nTESt`
+- exact launch signature `36T8KBJ5nYvb7mnuZp4ApqPpzzHDYXDuYnewZadGe4GfBXasGwx2YdXG37WuAaLWUzU1Wa83dGVzYab9NP6AviUu`
+
+The exact-signature replay returned HTTP 200 and reproduced the same StonkFun launch. The public RPC throttled the more expensive holder-distribution method afterward, so the analysis correctly returned `launch: receipt` + `distribution: rpc-blocked` instead of inventing holder numbers. The pinned receipt is documented in `docs/stonkfun-mainnet-fixture.md`.
+
 ### Source-aware holder distribution
 
 Holder concentration is no longer hardwired to the Pump bonding curve internally.
@@ -245,8 +255,8 @@ Pump-specific early-buyer, funding and dev-history logic is **not** reused for S
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
-- verify StonkFun launch decoding against an exact real mainnet transaction
-- add LaunchLab-specific early-buyer semantics before live-wiring StonkFun into the shared feed
+- add LaunchLab-specific early-buyer semantics before live-wiring StonkFun into the shared dashboard
+- verify source-aware StonkFun holder distribution on a dedicated RPC without public-endpoint throttling
 - additional Solana launchpads after the Pump path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
