@@ -198,6 +198,8 @@ async function loadStonkEvidence(
       earlyBuyerCount: null,
       top1ExternalPct: null,
       top10ExternalPct: null,
+      lastActivityAt: null,
+      activityCoverage: "blocked",
       coverage: "blocked",
     };
   }
