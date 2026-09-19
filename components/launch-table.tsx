@@ -174,8 +174,6 @@ export function LaunchTable({
   const requested = useRef(new Set<string>());
 
   useEffect(() => {
-    let cancelled = false;
-
     const candidates = launches.slice(0, 10).filter((launch) => {
       const key = launchKey(launch);
       return !replayIds.has(key) && !requested.current.has(key);
@@ -185,8 +183,6 @@ export function LaunchTable({
 
     void (async () => {
       for (const launch of candidates) {
-        if (cancelled) break;
-
         const key = launchKey(launch);
         requested.current.add(key);
         setEvidenceByKey((current) => ({
@@ -205,17 +201,12 @@ export function LaunchTable({
             ? await loadPumpEvidence(launch)
             : await loadStonkEvidence(launch);
 
-        if (cancelled) break;
         setEvidenceByKey((current) => ({
           ...current,
           [key]: evidence,
         }));
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [launches, replayIds]);
 
   const rows = useMemo(
