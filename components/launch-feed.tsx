@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FundingMap } from "@/components/funding-map";
+import { StonkFunPanel } from "@/components/stonkfun-panel";
 import { buildDevCadence } from "@/lib/dev-cadence";
 import { buildSameSlotClusters } from "@/lib/early-timing";
 import { TrenchBrand } from "@/components/trench-brand";
@@ -1674,8 +1675,10 @@ export function LaunchFeed() {
         </section>
       )}
 
+      <StonkFunPanel />
+
       <footer className="footer-note">
-        <span>TrenchScan v0.27 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.28 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>

@@ -1990,3 +1990,408 @@ tbody tr[data-selected="true"] {
     border-right: 0;
   }
 }
+
+
+.stonkfun-panel {
+  margin-top: 24px;
+  border: 1px solid rgba(155, 125, 255, 0.22);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(155, 125, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(8, 12, 18, 0.96), rgba(3, 10, 8, 0.98));
+}
+
+.stonkfun-panel-head {
+  min-height: 138px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 26px 28px;
+  border-bottom: 1px solid rgba(155, 125, 255, 0.16);
+}
+
+.stonkfun-panel-head > div {
+  max-width: 760px;
+}
+
+.stonkfun-panel-head h2 {
+  margin: 8px 0 7px;
+  color: #d9e7e1;
+  font-size: clamp(22px, 3vw, 36px);
+  letter-spacing: -0.045em;
+}
+
+.stonkfun-panel-head p {
+  max-width: 700px;
+  margin: 0;
+  color: #70877f;
+  font: 10px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-load-button {
+  min-height: 42px;
+  flex: 0 0 auto;
+  padding: 0 15px;
+  border: 1px solid rgba(155, 125, 255, 0.42);
+  background: rgba(155, 125, 255, 0.05);
+  color: #bcaeff;
+  font: 800 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.stonkfun-load-button:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
+.stonkfun-empty,
+.stonkfun-error {
+  display: grid;
+  gap: 7px;
+  padding: 17px 28px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-empty strong,
+.stonkfun-error strong {
+  color: #ad9cff;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.stonkfun-empty span,
+.stonkfun-error span {
+  color: #71877f;
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.stonkfun-error strong {
+  color: var(--danger);
+}
+
+.stonkfun-error small {
+  color: #5b7068;
+  font-size: 7px;
+  line-height: 1.55;
+}
+
+.stonkfun-proof-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(155, 125, 255, 0.14);
+}
+
+.stonkfun-proof-strip > div {
+  min-width: 0;
+  padding: 11px 16px;
+  border-right: 1px solid rgba(155, 125, 255, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-proof-strip > div:last-child {
+  border-right: 0;
+}
+
+.stonkfun-proof-strip span,
+.stonkfun-proof-strip strong {
+  display: block;
+}
+
+.stonkfun-proof-strip span {
+  color: #5a6b78;
+  font-size: 6.5px;
+  letter-spacing: 0.07em;
+}
+
+.stonkfun-proof-strip strong {
+  margin-top: 5px;
+  color: #bcaeff;
+  font-size: 8px;
+  letter-spacing: 0.065em;
+}
+
+.stonkfun-proof-strip [data-state="ready"] strong {
+  color: var(--acid);
+}
+
+.stonkfun-proof-strip [data-state="error"] strong {
+  color: var(--danger);
+}
+
+.stonkfun-launch-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.85fr);
+  gap: 20px;
+  padding: 22px 28px;
+  border-bottom: 1px solid rgba(155, 125, 255, 0.14);
+}
+
+.stonkfun-badge {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid rgba(155, 125, 255, 0.32);
+  color: #bcaeff;
+  font: 800 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.09em;
+}
+
+.stonkfun-launch-main h3 {
+  margin: 10px 0 0;
+  color: #dce9e4;
+  font-size: 27px;
+  letter-spacing: -0.04em;
+}
+
+.stonkfun-launch-main h3 small {
+  margin-left: 10px;
+  color: #62786f;
+  font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-launch-tags,
+.stonkfun-launch-receipts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.stonkfun-launch-tags {
+  margin-top: 12px;
+}
+
+.stonkfun-launch-tags span,
+.stonkfun-launch-receipts a {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid rgba(104, 136, 126, 0.2);
+  color: #718b82;
+  font: 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-decoration: none;
+}
+
+.stonkfun-launch-receipts {
+  align-content: flex-start;
+  justify-content: flex-end;
+}
+
+.stonkfun-launch-receipts a:hover {
+  border-color: rgba(155, 125, 255, 0.42);
+  color: #c3b8ff;
+}
+
+.stonkfun-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stonkfun-block {
+  min-width: 0;
+}
+
+.stonkfun-block:first-child {
+  border-right: 1px solid rgba(155, 125, 255, 0.14);
+}
+
+.stonkfun-block-head {
+  min-height: 57px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(155, 125, 255, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-block-head strong {
+  color: #c6d5cf;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+}
+
+.stonkfun-block-head span {
+  color: #566c64;
+  font-size: 6.5px;
+}
+
+.stonkfun-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  padding: 14px 16px;
+}
+
+.stonkfun-metrics > div {
+  padding: 10px;
+  border: 1px solid rgba(104, 136, 126, 0.16);
+  background: rgba(5, 14, 12, 0.38);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-metrics span,
+.stonkfun-metrics strong {
+  display: block;
+}
+
+.stonkfun-metrics span {
+  color: #50685f;
+  font-size: 6px;
+  letter-spacing: 0.07em;
+}
+
+.stonkfun-metrics strong {
+  margin-top: 8px;
+  color: var(--acid);
+  font-size: 15px;
+}
+
+.stonkfun-exclusions {
+  display: grid;
+  gap: 7px;
+  padding: 0 16px 16px;
+}
+
+.stonkfun-exclusions a {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid rgba(155, 125, 255, 0.13);
+  color: #71857e;
+  font: 7px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-decoration: none;
+}
+
+.stonkfun-exclusions strong {
+  color: #bcaeff;
+}
+
+.stonkfun-exclusions small {
+  color: #566962;
+}
+
+.stonkfun-early-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(155, 125, 255, 0.1);
+  color: #60766e;
+  font: 6.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.stonkfun-early-meta b {
+  color: #afc2ba;
+  font-size: 8px;
+}
+
+.stonkfun-buyers {
+  display: grid;
+}
+
+.stonkfun-buyers a {
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 30px 1fr 110px 58px 54px;
+  gap: 9px;
+  align-items: center;
+  padding: 7px 16px;
+  border-bottom: 1px solid rgba(104, 136, 126, 0.09);
+  color: #667d74;
+  font: 7px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-decoration: none;
+}
+
+.stonkfun-buyers strong {
+  color: #9db3aa;
+}
+
+.stonkfun-buyers small {
+  color: #8f7fff;
+}
+
+.stonkfun-layer-blocked,
+.stonkfun-layer-empty {
+  display: grid;
+  place-items: center;
+  min-height: 118px;
+  padding: 20px;
+  color: var(--danger);
+  font: 800 8px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: center;
+}
+
+.stonkfun-layer-blocked small,
+.stonkfun-layer-empty {
+  color: #5f746c;
+  font-weight: 500;
+}
+
+.stonkfun-caveat {
+  padding: 11px 18px 13px;
+  border-top: 1px solid rgba(155, 125, 255, 0.13);
+  color: #625d7b;
+  font: 6.7px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.025em;
+}
+
+@media (max-width: 980px) {
+  .stonkfun-panel-head,
+  .stonkfun-launch-card {
+    grid-template-columns: 1fr;
+  }
+
+  .stonkfun-panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stonkfun-launch-receipts {
+    justify-content: flex-start;
+  }
+
+  .stonkfun-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stonkfun-block:first-child {
+    border-right: 0;
+    border-bottom: 1px solid rgba(155, 125, 255, 0.14);
+  }
+}
+
+@media (max-width: 620px) {
+  .stonkfun-panel-head,
+  .stonkfun-launch-card {
+    padding-left: 17px;
+    padding-right: 17px;
+  }
+
+  .stonkfun-proof-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .stonkfun-proof-strip > div {
+    border-right: 0;
+    border-bottom: 1px solid rgba(155, 125, 255, 0.1);
+  }
+
+  .stonkfun-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stonkfun-buyers a {
+    grid-template-columns: 28px 1fr 56px;
+  }
+
+  .stonkfun-buyers a span:nth-of-type(2),
+  .stonkfun-buyers a small {
+    display: none;
+  }
+}
