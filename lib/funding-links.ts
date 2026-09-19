@@ -16,6 +16,7 @@ import type {
   WalletFingerprint,
   WalletHistoryClass,
 } from "./types";
+import { MAX_SUPPORTED_TRANSACTION_VERSION, withRpcRetry } from "./rpc";
 
 const MAX_WALLETS = 12;
 const HISTORY_SAMPLE_LIMIT = 50;
@@ -23,7 +24,7 @@ const TX_TO_PARSE_PER_WALLET = 8;
 const MAX_UPSTREAM_INTERMEDIARIES = 8;
 const UPSTREAM_SIGNATURE_LIMIT = 12;
 const UPSTREAM_TX_TO_PARSE = 6;
-const RPC_CONCURRENCY = 3;
+const RPC_CONCURRENCY = 2;
 const MIN_FUNDING_LAMPORTS = 10_000_000n;
 
 function isParsedInstruction(
@@ -91,9 +92,14 @@ async function parseTransactions(
 ) {
   if (!signatures.length) return [];
 
-  return connection.getParsedTransactions(
-    signatures.map((row) => row.signature),
-    { commitment: "confirmed", maxSupportedTransactionVersion: 0 },
+  return withRpcRetry(() =>
+    connection.getParsedTransactions(
+      signatures.map((row) => row.signature),
+      {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+      },
+    ),
   );
 }
 
