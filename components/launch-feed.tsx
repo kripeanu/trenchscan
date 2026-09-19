@@ -58,7 +58,7 @@ function statusCopy(status: UnifiedStreamStatus) {
     ).length;
     return `${live}/2 SOURCES LIVE`;
   }
-  if (status.state === "error") return "RPC ERROR";
+  if (status.state === "error") return "DATA CONNECTION ISSUE";
   return "CONNECTING";
 }
 
@@ -132,7 +132,7 @@ type SnapshotState = "idle" | "loading" | "ready" | "error";
 function evidenceStateCopy(state: SnapshotState) {
   if (state === "ready") return "RECEIPT";
   if (state === "loading") return "DIGGING";
-  if (state === "error") return "RPC BLOCKED";
+  if (state === "error") return "DATA DELAYED";
   return "NOT RUN";
 }
 
@@ -824,12 +824,12 @@ export function LaunchFeed() {
 
       <section className="stats-grid" aria-label="Session statistics">
         <div className="stat">
-          <span>FRESH IN BUFFER</span>
+          <span>LAUNCHES SEEN</span>
           <strong>{launches.length}</strong>
           <small>recent launches cached by the shared listener</small>
         </div>
         <div className="stat">
-          <span>OLDEST IN FEED</span>
+          <span>OLDEST SHOWN</span>
           <strong>{sessionAge}</strong>
           <small>still early. eyes open.</small>
         </div>
@@ -863,7 +863,7 @@ export function LaunchFeed() {
         <aside className="side-stack">
           <section className="side-panel">
             <div className="side-heading">
-              <span>LIVE SIGNALS</span>
+              <span>NEW LAUNCHES</span>
               <small>chain events, no fanfic</small>
             </div>
             <div className="signal-list">
@@ -894,7 +894,7 @@ export function LaunchFeed() {
 
           <section className="side-panel why-panel">
             <div className="side-heading">
-              <span>WHY IT MATTERS</span>
+              <span>WHAT WE CHECK</span>
               <small>the actual edge</small>
             </div>
             <ul>
@@ -933,7 +933,7 @@ export function LaunchFeed() {
                   ? "RUNNING FULL PASS…"
                   : fullPassDone
                     ? "RERUN FULL PASS"
-                    : "RUN FULL RECEIPT PASS"}
+                    : "RUN ALL CHECKS"}
               </button>
               <button
                 className="share-button"
@@ -976,8 +976,8 @@ export function LaunchFeed() {
 
           <div className="receipt-coverage">
             <div className="receipt-coverage-head">
-              <span>RECEIPT COVERAGE</span>
-              <small>what we proved vs what the RPC let us read</small>
+              <span>DATA CHECKS</span>
+              <small>what finished vs what the data provider could not return yet</small>
             </div>
             <div className="receipt-coverage-grid">
               {evidenceCoverage.map((row) => (
@@ -1001,7 +1001,7 @@ export function LaunchFeed() {
 
           {snapshotState === "error" && (
             <div className="scan-error">
-              Bag map got RPC-blocked. The other receipts can still run. {snapshotError}
+              Holder data is temporarily unavailable. The other checks can still run. {snapshotError}
             </div>
           )}
 
@@ -1085,7 +1085,7 @@ export function LaunchFeed() {
 
                 {earlyState === "error" && (
                   <div className="early-status error">
-                    Early-buyer RPC read failed. Holder snapshot is still valid. {earlyError}
+                    Early-buyer data is temporarily unavailable. The holder check is still valid. {earlyError}
                   </div>
                 )}
 
@@ -1752,7 +1752,7 @@ export function LaunchFeed() {
 
       <footer className="footer-note">
         <span>TrenchScan v0.31 · signal over noise · backed by chain data</span>
-        <span>qualified + watching + raw · source-aware receipts · no hidden score</span>
+        <span>live + passed + all · holders + market cap · no hidden score</span>
       </footer>
     </main>
   );
