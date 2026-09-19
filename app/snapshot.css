@@ -1422,3 +1422,210 @@ tbody tr[data-selected="true"] {
     gap: 6px;
   }
 }
+
+
+.retention-block {
+  border-top: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(88, 207, 255, 0.025), rgba(4, 14, 11, 0.08));
+}
+
+.retention-head {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.retention-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+}
+
+.retention-head strong,
+.retention-head span,
+.retention-status,
+.retention-summary,
+.retention-card,
+.retention-caveat {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.retention-head strong {
+  color: var(--text);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.retention-head span {
+  color: #536f65;
+  font-size: 7.5px;
+}
+
+.retention-status {
+  min-height: 66px;
+  display: grid;
+  place-items: center;
+  padding: 14px 20px;
+  color: #668178;
+  font-size: 8px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.retention-status.error {
+  color: #c77f82;
+}
+
+.retention-summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  color: #526e64;
+  font-size: 7px;
+  letter-spacing: 0.06em;
+}
+
+.retention-summary b {
+  margin-right: 4px;
+  color: #a4bbb2;
+  font-size: 9px;
+}
+
+.retention-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  padding: 14px 20px 16px;
+}
+
+.retention-card {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(114, 157, 142, 0.18);
+  background: rgba(4, 14, 11, 0.52);
+}
+
+.retention-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.retention-card > div span {
+  overflow: hidden;
+  color: #89a299;
+  font-size: 7.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retention-card em {
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid #31584b;
+  color: #77938a;
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+}
+
+.retention-card strong {
+  display: block;
+  margin-top: 13px;
+  color: var(--acid);
+  font-size: 18px;
+  letter-spacing: -0.04em;
+}
+
+.retention-card small {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #547167;
+  font-size: 6.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retention-card[data-status="jeeted"],
+.retention-card[data-status="mostly-jeeted"] {
+  border-color: rgba(255, 102, 108, 0.24);
+  background: rgba(255, 102, 108, 0.025);
+}
+
+.retention-card[data-status="jeeted"] strong,
+.retention-card[data-status="mostly-jeeted"] strong,
+.retention-card[data-status="jeeted"] em,
+.retention-card[data-status="mostly-jeeted"] em {
+  color: var(--danger);
+}
+
+.retention-card[data-status="trimmed"] {
+  border-color: rgba(255, 199, 102, 0.24);
+}
+
+.retention-card[data-status="trimmed"] strong,
+.retention-card[data-status="trimmed"] em {
+  color: var(--amber);
+}
+
+.retention-card[data-status="added"] strong,
+.retention-card[data-status="added"] em {
+  color: var(--cyan);
+}
+
+.retention-caveat {
+  padding: 10px 20px 12px;
+  border-top: 1px solid rgba(88, 207, 255, 0.11);
+  color: #58766b;
+  font-size: 7px;
+  line-height: 1.55;
+}
+
+@media (max-width: 1080px) {
+  .retention-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .retention-head,
+  .retention-head > div,
+  .retention-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .retention-head {
+    gap: 10px;
+  }
+
+  .retention-summary {
+    gap: 7px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .retention-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .retention-grid {
+    grid-template-columns: 1fr;
+  }
+}
