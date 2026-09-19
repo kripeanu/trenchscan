@@ -163,7 +163,7 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-function buildClusters(links: FundingLink[]) {
+export function buildFundingClusters(links: FundingLink[]) {
   const bySource = new Map<string, FundingLink[]>();
 
   for (const link of links) {
@@ -240,6 +240,6 @@ export async function buildFundingTrace(
     walletsChecked: uniqueWallets.length,
     linksFound: links.length,
     links,
-    clusters: buildClusters(links),
+    clusters: buildFundingClusters(links),
   };
 }
