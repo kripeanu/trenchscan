@@ -288,6 +288,22 @@ LaunchLab now has its own early-buyer semantics instead of borrowing Pump's curv
 
 The same layer now appears in `/api/stonkfun/analyze/<launch-signature>` as independent evidence coverage. If the bounded pool history does not reach the launch receipt, `historyComplete` is false and TrenchScan does not claim the returned wallets are literally the first buyers.
 
+### Source-neutral launch envelope
+
+Pump and StonkFun now normalize into one common launch identity before any source-specific evidence is applied.
+
+The shared envelope carries:
+
+- signature / slot / seen time
+- source
+- token name / symbol / metadata URI
+- mint / creator / payer
+- a discriminated `venue` payload that preserves only the source-specific accounts that are actually meaningful
+
+Pump keeps its bonding curve / associated curve / Mayhem fields. StonkFun keeps its LaunchLab pool state / platform config / base + quote vaults / quote mint / initialize variant / reward mode.
+
+This is the architectural boundary needed before the two live launch streams can be merged safely. Common identity is shared; evidence semantics remain source-gated.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
@@ -332,4 +348,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.28 — source-aware StonkFun dashboard panel`
+`v0.29 — source-neutral launch envelope`
