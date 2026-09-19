@@ -192,7 +192,7 @@ class StonkFunLaunchHub {
           transaction,
           candidate.signature,
           candidate.slot,
-          transaction.blockTime !== null
+          transaction.blockTime != null
             ? transaction.blockTime * 1000
             : Date.now(),
         );
