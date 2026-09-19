@@ -116,7 +116,13 @@ class LaunchHub {
     },
     slot: number,
   ) {
-    if (notification.err || !looksLikeCreate(notification.logs)) return;
+    if (
+      notification.err ||
+      !this.listeners.size ||
+      !looksLikeCreate(notification.logs)
+    ) {
+      return;
+    }
 
     // Websocket log delivery can beat getParsedTransaction by a fraction of a
     // second. Retry briefly before dropping a real launch.
