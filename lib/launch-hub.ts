@@ -27,6 +27,9 @@ class LaunchHub {
   private startPromise: Promise<void> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retryMs = INITIAL_RETRY_MS;
+  private startedAt = Date.now();
+  private lastLaunchAt: number | null = null;
+  private lastErrorAt: number | null = null;
   private status: StreamStatus = {
     state: "connecting",
     program: PUMP_PROGRAM_ID.toBase58(),
@@ -34,6 +37,19 @@ class LaunchHub {
 
   constructor() {
     this.connection = createSolanaConnection();
+  }
+
+  diagnostics() {
+    return {
+      status: this.status,
+      subscriptionActive: this.subscriptionId !== null,
+      listeners: this.listeners.size,
+      bufferedLaunches: this.recentLaunches.length,
+      lastLaunchAt: this.lastLaunchAt,
+      lastErrorAt: this.lastErrorAt,
+      uptimeMs: Math.max(0, Date.now() - this.startedAt),
+      program: PUMP_PROGRAM_ID.toBase58(),
+    };
   }
 
   subscribe(listener: HubListener) {
@@ -71,6 +87,7 @@ class LaunchHub {
   private pushLaunch(launch: Launch) {
     if (this.recentLaunches.some((item) => item.id === launch.id)) return;
 
+    this.lastLaunchAt = Date.now();
     this.recentLaunches.unshift(launch);
     if (this.recentLaunches.length > MAX_BUFFERED_LAUNCHES) {
       this.recentLaunches.length = MAX_BUFFERED_LAUNCHES;
@@ -150,6 +167,7 @@ class LaunchHub {
       });
     } catch (error) {
       this.subscriptionId = null;
+      this.lastErrorAt = Date.now();
       console.error("[trenchscan] shared websocket subscription failed", error);
 
       this.setStatus({
