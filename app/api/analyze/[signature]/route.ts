@@ -42,6 +42,7 @@ export async function GET(
     return Response.json(analysis, {
       headers: {
         "Cache-Control": "public, max-age=15, stale-while-revalidate=45",
+        "X-TrenchScan-Coverage": analysis.coverage.complete ? "complete" : "partial",
       },
     });
   } catch (error) {
@@ -49,7 +50,7 @@ export async function GET(
     return Response.json(
       {
         error:
-          "Could not complete the required launch + holder evidence from Solana RPC",
+          "Could not decode the launch receipt from Solana RPC",
       },
       { status: 502 },
     );
