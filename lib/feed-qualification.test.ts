@@ -3,101 +3,110 @@ import { buildFeedQualification } from "./feed-qualification";
 
 const NOW = 1_000_000;
 
+function evidence(overrides: Partial<Parameters<typeof buildFeedQualification>[0]["evidence"] & {}> = {}) {
+  return {
+    holders: 18,
+    holdersComplete: true,
+    marketCapUsd: 14_000,
+    lastActivityAt: NOW - 20_000,
+    statsCoverage: "ready" as const,
+    activityCoverage: "ready" as const,
+    ...overrides,
+  };
+}
+
 describe("feed qualification", () => {
-  it("qualifies only when transparent receipt thresholds are met", () => {
+  it("passes a launch with enough holders, market cap, and recent activity", () => {
     expect(
       buildFeedQualification({
         now: NOW,
+        seenAt: NOW - 60_000,
         devLaunchesInWindow: 1,
-        evidence: {
-          coverage: "ready",
-          activityCoverage: "ready",
-          sampledExternalAccounts: 8,
-          earlyBuyerCount: 5,
-          top1ExternalPct: 18,
-          top10ExternalPct: 44,
-          lastActivityAt: NOW - 30_000,
-        },
+        evidence: evidence(),
       }).state,
-    ).toBe("qualified");
+    ).toBe("active");
   });
 
-  it("keeps thin launches in watching instead of pretending they are signal", () => {
+  it("filters launches with too few holders", () => {
     const result = buildFeedQualification({
       now: NOW,
+      seenAt: NOW - 60_000,
       devLaunchesInWindow: 1,
-      evidence: {
-        coverage: "ready",
-        activityCoverage: "ready",
-        sampledExternalAccounts: 3,
-        earlyBuyerCount: 2,
-        top1ExternalPct: 51,
-        top10ExternalPct: 82,
-        lastActivityAt: NOW - 20_000,
-      },
+      evidence: evidence({ holders: 4 }),
     });
 
-    expect(result.state).toBe("watching");
-    expect(result.reasons.join(" ")).toContain("needs 6+");
-    expect(result.reasons.join(" ")).toContain("needs 4+");
+    expect(result.state).toBe("low-holders");
+    expect(result.reason).toContain("4 holders");
   });
 
-  it("does not call a launch qualified when its pool has gone quiet", () => {
-    const result = buildFeedQualification({
-      now: NOW,
-      devLaunchesInWindow: 1,
-      evidence: {
-        coverage: "ready",
-        activityCoverage: "ready",
-        sampledExternalAccounts: 10,
-        earlyBuyerCount: 9,
-        top1ExternalPct: 12,
-        top10ExternalPct: 40,
-        lastActivityAt: NOW - 5 * 60_000,
-      },
-    });
-
-    expect(result.state).toBe("watching");
-    expect(result.reasons.join(" ")).toContain("last 2m");
+  it("filters launches below the market-cap floor", () => {
+    expect(
+      buildFeedQualification({
+        now: NOW,
+        seenAt: NOW - 60_000,
+        devLaunchesInWindow: 1,
+        evidence: evidence({ marketCapUsd: 3_500 }),
+      }).state,
+    ).toBe("low-market-cap");
   });
 
-  it("ages out a launch after ten quiet minutes while RAW can still preserve it", () => {
-    const result = buildFeedQualification({
-      now: NOW,
-      devLaunchesInWindow: 1,
-      evidence: {
-        coverage: "ready",
-        activityCoverage: "ready",
-        sampledExternalAccounts: 10,
-        earlyBuyerCount: 9,
-        top1ExternalPct: 12,
-        top10ExternalPct: 40,
-        lastActivityAt: NOW - 11 * 60_000,
-      },
-    });
-
-    expect(result.state).toBe("stale");
+  it("keeps otherwise good launches out of active when activity cools", () => {
+    expect(
+      buildFeedQualification({
+        now: NOW,
+        seenAt: NOW - 5 * 60_000,
+        devLaunchesInWindow: 1,
+        evidence: evidence({ lastActivityAt: NOW - 5 * 60_000 }),
+      }).state,
+    ).toBe("quiet");
   });
 
-  it("suppresses observed rapid-fire creator floods without calling them scams", () => {
+  it("ages out a launch after ten quiet minutes", () => {
+    expect(
+      buildFeedQualification({
+        now: NOW,
+        seenAt: NOW - 12 * 60_000,
+        devLaunchesInWindow: 1,
+        evidence: evidence({ lastActivityAt: NOW - 11 * 60_000 }),
+      }).state,
+    ).toBe("stale");
+  });
+
+  it("describes provider trouble as delayed data, not token risk", () => {
+    expect(
+      buildFeedQualification({
+        now: NOW,
+        seenAt: NOW - 30_000,
+        devLaunchesInWindow: 1,
+        evidence: evidence({
+          holders: null,
+          statsCoverage: "unavailable",
+        }),
+      }).state,
+    ).toBe("data-delayed");
+  });
+
+  it("suppresses rapid-fire creator floods without calling them scams", () => {
     const result = buildFeedQualification({
       now: NOW,
+      seenAt: NOW - 30_000,
       devLaunchesInWindow: 5,
       evidence: null,
     });
 
-    expect(result.state).toBe("dev-flood");
-    expect(result.reasons[0]).toContain("5 launches");
+    expect(result.state).toBe("dev-spam");
+    expect(result.reason).toContain("5 launches");
   });
 
-  it("keeps verified demo receipts available even during creator flood", () => {
+  it("keeps verified demo receipts visible", () => {
     expect(
       buildFeedQualification({
         now: NOW,
+        seenAt: NOW,
         devLaunchesInWindow: 20,
         replay: true,
         evidence: null,
       }).state,
-    ).toBe("qualified");
+    ).toBe("active");
   });
 });
