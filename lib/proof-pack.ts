@@ -2,12 +2,13 @@ import type { TrenchBrief } from "./trench-brief";
 import type {
   DevHistoryScan,
   EarlyBuyerScan,
+  EarlyRetentionScan,
   FundingTrace,
   Launch,
   TokenSnapshot,
 } from "./types";
 
-export const PROOF_PACK_SCHEMA_VERSION = 1 as const;
+export const PROOF_PACK_SCHEMA_VERSION = 2 as const;
 
 export type ProofPack = {
   schemaVersion: typeof PROOF_PACK_SCHEMA_VERSION;
@@ -15,6 +16,7 @@ export type ProofPack = {
   launch: Launch;
   snapshot: TokenSnapshot;
   earlyBuyers: EarlyBuyerScan | null;
+  earlyRetention: EarlyRetentionScan | null;
   fundingTrace: FundingTrace | null;
   devHistory: DevHistoryScan | null;
   trenchBrief: TrenchBrief;
@@ -38,6 +40,7 @@ export function buildProofPack(input: {
   launch: Launch;
   snapshot: TokenSnapshot;
   earlyBuyers: EarlyBuyerScan | null;
+  earlyRetention?: EarlyRetentionScan | null;
   fundingTrace: FundingTrace | null;
   devHistory: DevHistoryScan | null;
   trenchBrief: TrenchBrief;
@@ -47,6 +50,7 @@ export function buildProofPack(input: {
     launch,
     snapshot,
     earlyBuyers,
+    earlyRetention = null,
     fundingTrace,
     devHistory,
     trenchBrief,
@@ -58,6 +62,7 @@ export function buildProofPack(input: {
     launch,
     snapshot,
     earlyBuyers,
+    earlyRetention,
     fundingTrace,
     devHistory,
     trenchBrief,
@@ -79,6 +84,7 @@ export function buildProofPack(input: {
       earlyBuyers?.historyComplete === false
         ? "Early-buyer replay is a partial bounded window and is not claimed as the literal first complete buyer set."
         : "Early-buyer conclusions are limited to decoded balance increases in the replayed Pump curve window.",
+      "Early-buyer retention compares current balance with the first decoded token increase; it is not a complete buy/sell PnL ledger.",
       "Wallet freshness is inferred from bounded sampled pre-buy history, not proof that an address never existed before.",
       "Shared direct or upstream funding is a relationship clue, not proof of common ownership or coordination.",
       "Prior creator launches are prior creates only; they are not labeled rugs without separate evidence.",

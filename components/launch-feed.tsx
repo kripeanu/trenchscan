@@ -5,7 +5,7 @@ import { FundingMap } from "@/components/funding-map";
 import { TrenchBrand } from "@/components/trench-brand";
 import { buildTrenchBrief } from "@/lib/trench-brief";
 import { buildProofPack, buildShareText } from "@/lib/proof-pack";
-import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, Launch, ReplayLaunch, StreamStatus, TokenSnapshot } from "@/lib/types";
+import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, Launch, ReplayLaunch, StreamStatus, TokenSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 80;
 
@@ -106,6 +106,9 @@ export function LaunchFeed() {
   const [earlyBuyers, setEarlyBuyers] = useState<EarlyBuyerScan | null>(null);
   const [earlyState, setEarlyState] = useState<SnapshotState>("idle");
   const [earlyError, setEarlyError] = useState<string | null>(null);
+  const [earlyRetention, setEarlyRetention] = useState<EarlyRetentionScan | null>(null);
+  const [retentionState, setRetentionState] = useState<SnapshotState>("idle");
+  const [retentionError, setRetentionError] = useState<string | null>(null);
   const [fundingTrace, setFundingTrace] = useState<FundingTrace | null>(null);
   const [fundingState, setFundingState] = useState<SnapshotState>("idle");
   const [fundingError, setFundingError] = useState<string | null>(null);
@@ -266,6 +269,7 @@ export function LaunchFeed() {
       launch: selected,
       snapshot,
       earlyBuyers,
+      earlyRetention,
       fundingTrace,
       devHistory,
       trenchBrief,
@@ -288,7 +292,55 @@ export function LaunchFeed() {
   function runFullReceiptPass() {
     if (earlyState !== "ready") return;
     void checkDevBaggage();
-    if (earlyBuyers?.buyers.length) void traceFunding();
+    if (earlyBuyers?.buyers.length) {
+      void checkEarlyRetention();
+      void traceFunding();
+    }
+  }
+
+  async function checkEarlyRetention() {
+    if (!selected || !earlyBuyers?.buyers.length) return;
+
+    const scanId = selected.id;
+    setEarlyRetention(null);
+    setRetentionError(null);
+    setRetentionState("loading");
+
+    try {
+      const response = await fetch("/api/early-retention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          mint: selected.mint,
+          buyers: earlyBuyers.buyers.slice(0, 12).map((buyer) => ({
+            wallet: buyer.wallet,
+            rawFirstBuy: buyer.rawTokenDelta,
+          })),
+        }),
+      });
+      const payload = (await response.json()) as
+        | EarlyRetentionScan
+        | { error: string };
+
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload ? payload.error : "Retention scan failed",
+        );
+      }
+
+      if (activeScan.current !== scanId) return;
+      setEarlyRetention(payload);
+      setRetentionState("ready");
+    } catch (error) {
+      if (activeScan.current !== scanId) return;
+      setRetentionState("error");
+      setRetentionError(
+        error instanceof Error
+          ? error.message
+          : "Could not compare early wallets with current balances",
+      );
+    }
   }
 
   async function loadEarlyBuyers(launch: Launch) {
@@ -415,6 +467,9 @@ export function LaunchFeed() {
     setEarlyBuyers(null);
     setEarlyError(null);
     setEarlyState("loading");
+    setEarlyRetention(null);
+    setRetentionError(null);
+    setRetentionState("idle");
     setFundingTrace(null);
     setFundingError(null);
     setFundingState("idle");
@@ -463,14 +518,20 @@ export function LaunchFeed() {
     ? buildTrenchBrief({
         snapshot,
         earlyBuyers,
+        earlyRetention,
         fundingTrace,
         devHistory,
         devBagPct,
       })
     : null;
   const fullPassBusy =
-    fundingState === "loading" || devState === "loading";
-  const fullPassDone = fundingTrace !== null && devHistory !== null;
+    fundingState === "loading" ||
+    devState === "loading" ||
+    retentionState === "loading";
+  const fullPassDone =
+    fundingTrace !== null &&
+    devHistory !== null &&
+    earlyRetention !== null;
 
   return (
     <main className="terminal-shell">
@@ -790,6 +851,9 @@ export function LaunchFeed() {
                   setEarlyBuyers(null);
                   setEarlyState("idle");
                   setEarlyError(null);
+                  setEarlyRetention(null);
+                  setRetentionState("idle");
+                  setRetentionError(null);
                   setFundingTrace(null);
                   setFundingState("idle");
                   setFundingError(null);
@@ -964,6 +1028,84 @@ export function LaunchFeed() {
                       <div className="early-status">
                         No external positive token deltas decoded in this window yet.
                       </div>
+                    )}
+
+                    {earlyBuyers.buyers.length > 0 && (
+                      <section className="retention-block">
+                        <div className="retention-head">
+                          <div>
+                            <strong>WHO JEETED?</strong>
+                            <span>
+                              first decoded grab vs what each early wallet holds now
+                            </span>
+                          </div>
+                          <button
+                            className="trace-button"
+                            type="button"
+                            onClick={() => void checkEarlyRetention()}
+                            disabled={retentionState === "loading"}
+                          >
+                            {retentionState === "loading"
+                              ? "CHECKING BAGS…"
+                              : retentionState === "ready"
+                                ? "CHECK AGAIN"
+                                : "CHECK NOW →"}
+                          </button>
+                        </div>
+
+                        {retentionState === "error" && (
+                          <div className="retention-status error">
+                            Couldn&apos;t read current bags. {retentionError}
+                          </div>
+                        )}
+
+                        {earlyRetention && retentionState === "ready" && (
+                          <>
+                            <div className="retention-summary">
+                              <span>
+                                <b>{earlyRetention.jeetedCount + earlyRetention.mostlyJeetedCount}</b>{" "}
+                                DUMPED MOST
+                              </span>
+                              <span>
+                                <b>{earlyRetention.trimmedCount}</b> TRIMMED
+                              </span>
+                              <span>
+                                <b>{earlyRetention.holdingCount}</b> STILL HOLDING
+                              </span>
+                              <span>
+                                <b>{earlyRetention.addedCount}</b> ADDED MORE
+                              </span>
+                            </div>
+
+                            <div className="retention-grid">
+                              {earlyRetention.rows.map((row) => (
+                                <a
+                                  key={row.wallet}
+                                  className="retention-card"
+                                  data-status={row.status}
+                                  href={`https://solscan.io/account/${row.wallet}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <div>
+                                    <span>{short(row.wallet)}</span>
+                                    <em>{row.status.replace("-", " ").toUpperCase()}</em>
+                                  </div>
+                                  <strong>{pct(row.retainedPct)}</strong>
+                                  <small>
+                                    first {compactNumber(row.uiFirstBuy)} → now {compactNumber(row.uiCurrent)}
+                                  </small>
+                                </a>
+                              ))}
+                            </div>
+
+                            <div className="retention-caveat">
+                              CURRENT BAG CHECK: this compares current balance with the first decoded
+                              token increase. It does not reconstruct every later buy/sell or claim PnL.
+                            </div>
+                          </>
+                        )}
+                      </section>
                     )}
 
                     {earlyBuyers.buyers.length >= 2 && (
@@ -1356,7 +1498,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.13 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.14 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>

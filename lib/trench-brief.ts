@@ -1,4 +1,4 @@
-import type { DevHistoryScan, EarlyBuyerScan, FundingTrace, TokenSnapshot } from "./types";
+import type { DevHistoryScan, EarlyBuyerScan, EarlyRetentionScan, FundingTrace, TokenSnapshot } from "./types";
 
 export type BriefTone = "good" | "neutral" | "warning" | "danger";
 export type BriefSignal = { label: string; value: string; detail: string; tone: BriefTone };
@@ -15,9 +15,17 @@ export function buildTrenchBrief(input: {
   earlyBuyers: EarlyBuyerScan | null;
   fundingTrace: FundingTrace | null;
   devHistory: DevHistoryScan | null;
+  earlyRetention?: EarlyRetentionScan | null;
   devBagPct: number | null;
 }): TrenchBrief {
-  const { snapshot, earlyBuyers, fundingTrace, devHistory, devBagPct } = input;
+  const {
+    snapshot,
+    earlyBuyers,
+    fundingTrace,
+    devHistory,
+    earlyRetention = null,
+    devBagPct,
+  } = input;
   const signals: BriefSignal[] = [];
   const top10 = snapshot.top10ExternalPct;
 
@@ -59,6 +67,27 @@ export function buildTrenchBrief(input: {
       value: String(fastBuyers),
       detail: `${fastBuyers} decoded wallet${fastBuyers === 1 ? "" : "s"} landed inside 30s of launch.`,
       tone: fastBuyers >= 5 ? "warning" : "neutral",
+    });
+  }
+
+  if (earlyRetention) {
+    const dumpedMost =
+      earlyRetention.jeetedCount + earlyRetention.mostlyJeetedCount;
+    const exitedOrTrimmed = dumpedMost + earlyRetention.trimmedCount;
+
+    signals.push({
+      label: "EARLY EXIT?",
+      value: `${dumpedMost}/${earlyRetention.walletsChecked} DUMPED MOST`,
+      detail:
+        dumpedMost > 0
+          ? `${dumpedMost} early wallet${dumpedMost === 1 ? "" : "s"} now hold under 20% of their first decoded grab; ${exitedOrTrimmed} trimmed or dumped overall.`
+          : "None of the checked early wallets are below 20% of their first decoded grab right now.",
+      tone:
+        dumpedMost >= 6
+          ? "danger"
+          : dumpedMost >= 3 || exitedOrTrimmed >= 6
+            ? "warning"
+            : "good",
     });
   }
 
@@ -154,6 +183,10 @@ export function buildTrenchBrief(input: {
   const bottom: string[] = [];
   if (top10 !== null) bottom.push(`Top 10 external bags sit at ${pct(top10)}.`);
   if (earlyConcentration !== null) bottom.push(`Decoded early wallets account for ${pct(earlyConcentration)} of supply in this read.`);
+  if (earlyRetention) {
+    const dumpedMost = earlyRetention.jeetedCount + earlyRetention.mostlyJeetedCount;
+    bottom.push(`${dumpedMost}/${earlyRetention.walletsChecked} checked early wallets now hold under 20% of their first decoded grab.`);
+  }
   if (largestCluster) bottom.push(`${largestCluster.memberCount} early wallets share one direct funder.`);
   if (freshWallets) bottom.push(`${freshWallets} early wallets look fresh inside the sampled pre-buy history.`);
   if (largestUpstreamCluster) bottom.push(`${largestUpstreamCluster.buyerCount} early wallets connect one hop deeper through ${largestUpstreamCluster.intermediaryCount} direct funders.`);

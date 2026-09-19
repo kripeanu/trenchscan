@@ -56,13 +56,14 @@ describe("proof pack", () => {
       launch,
       snapshot,
       earlyBuyers: null,
+      earlyRetention: null,
       fundingTrace: null,
       devHistory: null,
       trenchBrief: brief,
       generatedAt: 123,
     });
 
-    expect(pack.schemaVersion).toBe(1);
+    expect(pack.schemaVersion).toBe(2);
     expect(pack.generatedAt).toBe(123);
     expect(pack.receipts.launchTx).toContain("/tx/sig");
     expect(pack.receipts.directFundingTxs).toEqual([]);
