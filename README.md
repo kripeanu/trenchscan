@@ -260,6 +260,23 @@ It subscribes only while a client is connected, wakes the exact transaction deco
 
 The stream remains separate from the Pump dashboard until LaunchLab-specific early-buyer semantics are verified. `/api/health` exposes its listener state, verified buffer, candidate count and generic-LaunchLab rejection count.
 
+### StonkFun dashboard panel
+
+The homepage now has a separate **STONKFUN // SOURCE-AWARE INTEL** panel backed by the verified RRM mainnet fixture.
+
+It deliberately stays separate from the Pump launch table while the two sources still have different evidence semantics.
+
+The panel can replay the verified StonkFun launch and shows:
+
+- launch / bag-map / early-crew evidence coverage independently
+- exact LaunchLab variant + reward mode
+- launch, mint, pool and platform-config receipts
+- source-aware holder concentration with the LaunchLab base vault excluded
+- LaunchLab-specific early buyers only when an exact buy instruction and positive base-token balance delta agree
+- explicit `RPC BLOCKED` states instead of Pump fallbacks or fabricated values
+
+This is the first visible multi-launchpad surface in TrenchScan without pretending the underlying launchpads are interchangeable.
+
 ### StonkFun early-buyer receipts
 
 LaunchLab now has its own early-buyer semantics instead of borrowing Pump's curve logic.
@@ -315,4 +332,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.27 — LaunchLab-specific early-buyer receipts`
+`v0.28 — source-aware StonkFun dashboard panel`
