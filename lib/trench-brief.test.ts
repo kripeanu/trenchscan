@@ -123,6 +123,20 @@ describe("buildTrenchBrief", () => {
     expect(brief.signals.find((signal) => signal.label === "DEV BAGGAGE")?.value).toBe("NOT CHECKED");
   });
 
+  it("still returns a conservative brief when holder RPC is unavailable", () => {
+    const brief = buildTrenchBrief({
+      snapshot: null,
+      earlyBuyers: early([2, 2, 2]),
+      fundingTrace: null,
+      devHistory: null,
+      devBagPct: null,
+    });
+
+    expect(brief.label).toBe("MORE RECEIPTS NEEDED");
+    expect(brief.signals.find((signal) => signal.label === "HOLDER MAP")?.value).toBe("RPC BLOCKED");
+    expect(brief.bottomLine).toContain("Holder distribution is missing");
+  });
+
   it("raises multiple red flags only from visible evidence", () => {
     const brief = buildTrenchBrief({
       snapshot: snapshot(78),

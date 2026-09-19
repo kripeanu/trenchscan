@@ -8,13 +8,13 @@ import type {
   TokenSnapshot,
 } from "./types";
 
-export const PROOF_PACK_SCHEMA_VERSION = 2 as const;
+export const PROOF_PACK_SCHEMA_VERSION = 3 as const;
 
 export type ProofPack = {
   schemaVersion: typeof PROOF_PACK_SCHEMA_VERSION;
   generatedAt: number;
   launch: Launch;
-  snapshot: TokenSnapshot;
+  snapshot: TokenSnapshot | null;
   earlyBuyers: EarlyBuyerScan | null;
   earlyRetention: EarlyRetentionScan | null;
   fundingTrace: FundingTrace | null;
@@ -38,7 +38,7 @@ const solscan = (kind: "tx" | "account" | "token", value: string) =>
 
 export function buildProofPack(input: {
   launch: Launch;
-  snapshot: TokenSnapshot;
+  snapshot: TokenSnapshot | null;
   earlyBuyers: EarlyBuyerScan | null;
   earlyRetention?: EarlyRetentionScan | null;
   fundingTrace: FundingTrace | null;
@@ -70,7 +70,10 @@ export function buildProofPack(input: {
       launchTx: solscan("tx", launch.signature),
       mint: solscan("token", launch.mint),
       creator: solscan("account", launch.creator),
-      bondingCurve: solscan("account", snapshot.bondingCurve),
+      bondingCurve: solscan(
+        "account",
+        snapshot?.bondingCurve ?? launch.bondingCurve,
+      ),
       earlyBuyerTxs:
         earlyBuyers?.buyers.map((buyer) => solscan("tx", buyer.signature)) ?? [],
       directFundingTxs:
@@ -81,6 +84,9 @@ export function buildProofPack(input: {
         devHistory?.priorLaunches.map((row) => solscan("tx", row.signature)) ?? [],
     },
     limitations: [
+      snapshot === null
+        ? "Holder snapshot was unavailable for this proof pack; holder concentration and creator-bag claims are omitted."
+        : "Holder snapshot was read on-chain and Pump curve inventory is excluded from external-holder concentration.",
       earlyBuyers?.historyComplete === false
         ? "Early-buyer replay is a partial bounded window and is not claimed as the literal first complete buyer set."
         : "Early-buyer conclusions are limited to decoded balance increases in the replayed Pump curve window.",

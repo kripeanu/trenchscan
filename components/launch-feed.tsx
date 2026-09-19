@@ -97,6 +97,13 @@ function totalSupplyPct(amount: number | null, supply: number | null) {
 
 type SnapshotState = "idle" | "loading" | "ready" | "error";
 
+function evidenceStateCopy(state: SnapshotState) {
+  if (state === "ready") return "RECEIPT";
+  if (state === "loading") return "DIGGING";
+  if (state === "error") return "RPC BLOCKED";
+  return "NOT RUN";
+}
+
 export function LaunchFeed() {
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [status, setStatus] = useState<StreamStatus>({ state: "connecting" });
@@ -521,24 +528,35 @@ export function LaunchFeed() {
     devHistory,
     earlyBuyers?.launchBlockTime ?? null,
   );
-  const trenchBrief = snapshot
-    ? buildTrenchBrief({
-        snapshot,
-        earlyBuyers,
-        earlyRetention,
-        fundingTrace,
-        devHistory,
-        devBagPct,
-      })
-    : null;
+  const trenchBrief =
+    selected && snapshotState !== "loading"
+      ? buildTrenchBrief({
+          snapshot,
+          earlyBuyers,
+          earlyRetention,
+          fundingTrace,
+          devHistory,
+          devBagPct,
+        })
+      : null;
   const fullPassBusy =
     fundingState === "loading" ||
     devState === "loading" ||
     retentionState === "loading";
   const fullPassDone =
-    fundingTrace !== null &&
     devHistory !== null &&
-    earlyRetention !== null;
+    (!earlyBuyers?.buyers.length ||
+      (fundingTrace !== null && earlyRetention !== null));
+  const evidenceCoverage = selected
+    ? [
+        { label: "LAUNCH", state: "ready" as SnapshotState },
+        { label: "BAGS", state: snapshotState },
+        { label: "EARLY CREW", state: earlyState },
+        { label: "WHO JEETED", state: retentionState },
+        { label: "MONEY TRAIL", state: fundingState },
+        { label: "DEV", state: devState },
+      ]
+    : [];
 
   return (
     <main className="terminal-shell">
@@ -884,6 +902,25 @@ export function LaunchFeed() {
             </div>
           </div>
 
+          <div className="receipt-coverage">
+            <div className="receipt-coverage-head">
+              <span>RECEIPT COVERAGE</span>
+              <small>what we proved vs what the RPC let us read</small>
+            </div>
+            <div className="receipt-coverage-grid">
+              {evidenceCoverage.map((row) => (
+                <div
+                  key={row.label}
+                  className="receipt-coverage-item"
+                  data-state={row.state}
+                >
+                  <span>{row.label}</span>
+                  <strong>{evidenceStateCopy(row.state)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {snapshotState === "loading" && (
             <div className="scan-loading">
               Pulling bags straight from Solana…
@@ -892,8 +929,22 @@ export function LaunchFeed() {
 
           {snapshotState === "error" && (
             <div className="scan-error">
-              Couldn&apos;t read the bags. {snapshotError}
+              Bag map got RPC-blocked. The other receipts can still run. {snapshotError}
             </div>
+          )}
+
+          {snapshotState === "error" && trenchBrief && (
+            <aside className="partial-take" data-tone={trenchBrief.tone}>
+              <div>
+                <span>PARTIAL TRENCH TAKE</span>
+                <strong>{trenchBrief.label}</strong>
+              </div>
+              <p>{trenchBrief.bottomLine}</p>
+              <small>
+                No fake filler: missing holder evidence stays missing while the
+                launch / early-wallet / funding / dev layers keep their own state.
+              </small>
+            </aside>
           )}
 
           {snapshot && snapshotState === "ready" && (
@@ -1615,7 +1666,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.18 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.19 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>

@@ -13,7 +13,7 @@ const sumKnown = (values: Array<number | null>) => {
 };
 
 export function buildTrenchBrief(input: {
-  snapshot: TokenSnapshot;
+  snapshot: TokenSnapshot | null;
   earlyBuyers: EarlyBuyerScan | null;
   fundingTrace: FundingTrace | null;
   devHistory: DevHistoryScan | null;
@@ -29,9 +29,16 @@ export function buildTrenchBrief(input: {
     devBagPct,
   } = input;
   const signals: BriefSignal[] = [];
-  const top10 = snapshot.top10ExternalPct;
+  const top10 = snapshot?.top10ExternalPct ?? null;
 
-  if (top10 !== null) {
+  if (snapshot === null) {
+    signals.push({
+      label: "HOLDER MAP",
+      value: "RPC BLOCKED",
+      detail: "Holder distribution could not be read this pass. Other receipt layers can still be evaluated.",
+      tone: "neutral",
+    });
+  } else if (top10 !== null) {
     signals.push({
       label: "TOP BAGS",
       value: pct(top10),
@@ -209,7 +216,10 @@ export function buildTrenchBrief(input: {
 
   const dangers = signals.filter((signal) => signal.tone === "danger").length;
   const warnings = signals.filter((signal) => signal.tone === "warning").length;
-  const complete = fundingTrace !== null && devHistory !== null;
+  const complete =
+    snapshot !== null &&
+    fundingTrace !== null &&
+    devHistory !== null;
 
   let label = "MORE RECEIPTS NEEDED";
   let tone: BriefTone = "neutral";
@@ -234,7 +244,10 @@ export function buildTrenchBrief(input: {
     bottom.push(`Dev has ${devCadence.within24h} prior create${devCadence.within24h === 1 ? "" : "s"} inside 24h of this launch in the sampled window.`);
   }
   if (devHistory?.priorLaunches.length) bottom.push(`Dev has ${devHistory.priorLaunches.length} prior Pump create${devHistory.priorLaunches.length === 1 ? "" : "s"} in the sampled window.`);
-  if (!complete) bottom.push("Run Same Bankroll + Dev Baggage for the fuller read.");
+  if (snapshot === null) {
+    bottom.push("Holder distribution is missing from this read.");
+  }
+  if (!complete) bottom.push("Some receipt layers are still missing; treat this as a partial read.");
 
   return { label, tone, signals, bottomLine: bottom.join(" ") };
 }

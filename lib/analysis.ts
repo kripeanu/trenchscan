@@ -16,7 +16,7 @@ import type {
   TokenSnapshot,
 } from "./types";
 
-export const ANALYSIS_SCHEMA_VERSION = 2 as const;
+export const ANALYSIS_SCHEMA_VERSION = 3 as const;
 
 export type AnalysisStage =
   | "launch"
@@ -31,19 +31,35 @@ export type AnalysisWarning = {
   message: string;
 };
 
+export type AnalysisStageState = "ready" | "error" | "skipped";
+
+export type AnalysisCoverageRow = {
+  stage: AnalysisStage;
+  state: AnalysisStageState;
+  message?: string;
+};
+
+export type AnalysisCoverage = {
+  complete: boolean;
+  readyStages: number;
+  totalStages: number;
+  stages: AnalysisCoverageRow[];
+};
+
 export type AnalysisTiming = Partial<Record<AnalysisStage | "total", number>>;
 
 export type FullAnalysis = {
   schemaVersion: typeof ANALYSIS_SCHEMA_VERSION;
   analyzedAt: number;
   launch: Launch;
-  snapshot: TokenSnapshot;
+  snapshot: TokenSnapshot | null;
   earlyBuyers: EarlyBuyerScan | null;
   earlyRetention: EarlyRetentionScan | null;
   fundingTrace: FundingTrace | null;
   devHistory: DevHistoryScan | null;
   trenchBrief: ReturnType<typeof buildTrenchBrief>;
   proofPack: ReturnType<typeof buildProofPack>;
+  coverage: AnalysisCoverage;
   warnings: AnalysisWarning[];
   timingsMs: AnalysisTiming;
 };
@@ -56,11 +72,37 @@ function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : "Unknown RPC error";
 }
 
+function coverageRow(
+  stage: AnalysisStage,
+  state: AnalysisStageState,
+  message?: string,
+): AnalysisCoverageRow {
+  return message ? { stage, state, message } : { stage, state };
+}
+
+export function buildAnalysisCoverage(
+  rows: AnalysisCoverageRow[],
+): AnalysisCoverage {
+  const readyStages = rows.filter((row) => row.state === "ready").length;
+  const requiredRows = rows.filter((row) => row.state !== "skipped");
+
+  return {
+    complete:
+      requiredRows.length > 0 &&
+      requiredRows.every((row) => row.state === "ready"),
+    readyStages,
+    totalStages: rows.length,
+    stages: rows,
+  };
+}
+
 export function deriveDevBagPct(
-  snapshot: TokenSnapshot,
+  snapshot: TokenSnapshot | null,
   creator: string,
 ): number | null {
-  if (snapshot.uiSupply === null || snapshot.uiSupply <= 0) return null;
+  if (!snapshot || snapshot.uiSupply === null || snapshot.uiSupply <= 0) {
+    return null;
+  }
 
   const holder = snapshot.holders.find((row) => row.owner === creator);
   if (!holder || holder.uiAmount === null) return null;
@@ -72,8 +114,9 @@ export function deriveDevBagPct(
  * Runs TrenchScan's receipt-backed evidence pipeline from one exact Pump
  * create_v2 transaction.
  *
- * Launch + holder snapshot are required. Every later stage is optional and
- * degrades into an explicit warning instead of a guessed value.
+ * The launch receipt is the only hard requirement. Every downstream evidence
+ * layer degrades independently, so an RPC throttle never turns already-proven
+ * evidence into a generic 502.
  */
 export async function analyzeLaunchSignature(
   connection: Connection,
@@ -82,22 +125,23 @@ export async function analyzeLaunchSignature(
   const totalStart = Date.now();
   const timingsMs: AnalysisTiming = {};
   const warnings: AnalysisWarning[] = [];
+  const coverageRows: AnalysisCoverageRow[] = [];
 
   const launchStart = Date.now();
   const replay = await loadReplayLaunchBySignature(connection, signature);
   timingsMs.launch = elapsed(launchStart);
 
   if (!replay) return null;
+
   const launch = replay.launch;
+  coverageRows.push(coverageRow("launch", "ready"));
 
   const snapshotStart = Date.now();
-  const snapshot = await buildTokenSnapshot(connection, launch.mint);
-  timingsMs.snapshot = elapsed(snapshotStart);
-
   const earlyStart = Date.now();
   const devStart = Date.now();
 
-  const [earlyResult, devResult] = await Promise.allSettled([
+  const [snapshotResult, earlyResult, devResult] = await Promise.allSettled([
+    buildTokenSnapshot(connection, launch.mint),
     buildEarlyBuyerScan(
       connection,
       launch.mint,
@@ -108,28 +152,39 @@ export async function analyzeLaunchSignature(
     buildDevHistoryScan(connection, launch.creator, launch.signature),
   ]);
 
+  timingsMs.snapshot = elapsed(snapshotStart);
   timingsMs.earlyBuyers = elapsed(earlyStart);
   timingsMs.devHistory = elapsed(devStart);
 
+  let snapshot: TokenSnapshot | null = null;
   let earlyBuyers: EarlyBuyerScan | null = null;
   let devHistory: DevHistoryScan | null = null;
 
+  if (snapshotResult.status === "fulfilled") {
+    snapshot = snapshotResult.value;
+    coverageRows.push(coverageRow("snapshot", "ready"));
+  } else {
+    const message = messageFrom(snapshotResult.reason);
+    warnings.push({ stage: "snapshot", message });
+    coverageRows.push(coverageRow("snapshot", "error", message));
+  }
+
   if (earlyResult.status === "fulfilled") {
     earlyBuyers = earlyResult.value;
+    coverageRows.push(coverageRow("earlyBuyers", "ready"));
   } else {
-    warnings.push({
-      stage: "earlyBuyers",
-      message: messageFrom(earlyResult.reason),
-    });
+    const message = messageFrom(earlyResult.reason);
+    warnings.push({ stage: "earlyBuyers", message });
+    coverageRows.push(coverageRow("earlyBuyers", "error", message));
   }
 
   if (devResult.status === "fulfilled") {
     devHistory = devResult.value;
+    coverageRows.push(coverageRow("devHistory", "ready"));
   } else {
-    warnings.push({
-      stage: "devHistory",
-      message: messageFrom(devResult.reason),
-    });
+    const message = messageFrom(devResult.reason);
+    warnings.push({ stage: "devHistory", message });
+    coverageRows.push(coverageRow("devHistory", "error", message));
   }
 
   let earlyRetention: EarlyRetentionScan | null = null;
@@ -164,47 +219,32 @@ export async function analyzeLaunchSignature(
 
     if (retentionResult.status === "fulfilled") {
       earlyRetention = retentionResult.value;
+      coverageRows.push(coverageRow("earlyRetention", "ready"));
     } else {
-      warnings.push({
-        stage: "earlyRetention",
-        message: messageFrom(retentionResult.reason),
-      });
+      const message = messageFrom(retentionResult.reason);
+      warnings.push({ stage: "earlyRetention", message });
+      coverageRows.push(coverageRow("earlyRetention", "error", message));
     }
 
     if (fundingResult.status === "fulfilled") {
       fundingTrace = fundingResult.value;
+      coverageRows.push(coverageRow("fundingTrace", "ready"));
     } else {
-      warnings.push({
-        stage: "fundingTrace",
-        message: messageFrom(fundingResult.reason),
-      });
+      const message = messageFrom(fundingResult.reason);
+      warnings.push({ stage: "fundingTrace", message });
+      coverageRows.push(coverageRow("fundingTrace", "error", message));
     }
-  } else if (earlyBuyers) {
-    warnings.push(
-      {
-        stage: "earlyRetention",
-        message: "No decoded early buyers were available for retention analysis.",
-      },
-      {
-        stage: "fundingTrace",
-        message: "No decoded early buyers were available for funding analysis.",
-      },
-    );
-    timingsMs.earlyRetention = 0;
-    timingsMs.fundingTrace = 0;
   } else {
-    warnings.push(
-      {
-        stage: "earlyRetention",
-        message: "Retention analysis skipped because early-buyer replay failed.",
-      },
-      {
-        stage: "fundingTrace",
-        message: "Funding analysis skipped because early-buyer replay failed.",
-      },
-    );
+    const reason = earlyBuyers
+      ? "No decoded early buyers were available for this layer."
+      : "Skipped because the early-buyer replay was unavailable.";
+
     timingsMs.earlyRetention = 0;
     timingsMs.fundingTrace = 0;
+    coverageRows.push(
+      coverageRow("earlyRetention", "skipped", reason),
+      coverageRow("fundingTrace", "skipped", reason),
+    );
   }
 
   const devBagPct = deriveDevBagPct(snapshot, launch.creator);
@@ -242,6 +282,7 @@ export async function analyzeLaunchSignature(
     devHistory,
     trenchBrief,
     proofPack,
+    coverage: buildAnalysisCoverage(coverageRows),
     warnings,
     timingsMs,
   };

@@ -175,7 +175,7 @@ This gives us a fast way to diagnose Railway/RPC issues during demos instead of 
 
 `GET /api/analyze/<launch-transaction-signature>` runs the same evidence pipeline from one exact Pump launch transaction and returns a machine-readable analysis bundle.
 
-The endpoint requires a valid launch decode + holder snapshot, then runs the optional evidence layers with explicit degradation instead of guessed values:
+The endpoint now requires only a valid launch receipt. Every downstream evidence layer degrades independently instead of turning an RPC throttle into a generic failed scan:
 
 - early-buyer replay
 - **Who Jeeted?** current-balance retention
@@ -184,9 +184,11 @@ The endpoint requires a valid launch decode + holder snapshot, then runs the opt
 - exact-slot timing via the same deterministic Trench Brief logic
 - proof pack v2 with receipts + limitations
 - per-stage timing metadata
-- warnings for any optional RPC stage that could not complete
+- warnings for any RPC stage that could not complete
+- machine-readable **coverage** for every evidence layer
+- a partial Trench Brief + proof pack even when holder RPC is unavailable
 
-The token header exposes this as **FULL JSON**. That means the judge-facing UI, replay flow and developer-facing API all use the same underlying evidence modules.
+The token header exposes this as **FULL JSON**. The scan UI also shows **RECEIPT COVERAGE** so a trader or judge can distinguish `RECEIPT`, `DIGGING`, `NOT RUN` and `RPC BLOCKED` instead of seeing one vague spinner or failure.
 
 ## What comes next
 
@@ -230,4 +232,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.18 — runtime health + launch-listener diagnostics`
+`v0.19 — progressive evidence coverage + partial analysis`
