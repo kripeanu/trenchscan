@@ -1,7 +1,11 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { PUMP_PROGRAM_ID } from "@/lib/pump";
 import type { HolderRow, TokenSnapshot } from "@/lib/types";
+import { isRpcRateLimit, withRpcRetry } from "@/lib/rpc";
 
+const TOKEN_PROGRAM_ID = new PublicKey(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+);
 const TOKEN_2022_PROGRAM_ID = new PublicKey(
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
 );
@@ -19,16 +23,22 @@ function clampSub(left: bigint, right: bigint) {
   return left > right ? left - right : 0n;
 }
 
-export function derivePumpCurveAccounts(mint: PublicKey) {
-  const [bondingCurve] = PublicKey.findProgramAddressSync(
+export function derivePumpBondingCurve(mint: PublicKey) {
+  return PublicKey.findProgramAddressSync(
     [Buffer.from("bonding-curve"), mint.toBuffer()],
     PUMP_PROGRAM_ID,
-  );
+  )[0];
+}
 
+export function derivePumpCurveAccounts(
+  mint: PublicKey,
+  tokenProgram = TOKEN_2022_PROGRAM_ID,
+) {
+  const bondingCurve = derivePumpBondingCurve(mint);
   const [associatedBondingCurve] = PublicKey.findProgramAddressSync(
     [
       bondingCurve.toBuffer(),
-      TOKEN_2022_PROGRAM_ID.toBuffer(),
+      tokenProgram.toBuffer(),
       mint.toBuffer(),
     ],
     ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -37,19 +47,47 @@ export function derivePumpCurveAccounts(mint: PublicKey) {
   return { bondingCurve, associatedBondingCurve };
 }
 
+async function resolveMintTokenProgram(
+  connection: Connection,
+  mint: PublicKey,
+) {
+  const account = await withRpcRetry(() =>
+    connection.getAccountInfo(mint, "confirmed"),
+  );
+
+  if (!account) {
+    throw new Error("Mint account not found");
+  }
+
+  if (
+    !account.owner.equals(TOKEN_PROGRAM_ID) &&
+    !account.owner.equals(TOKEN_2022_PROGRAM_ID)
+  ) {
+    throw new Error(
+      `Unsupported mint owner program: ${account.owner.toBase58()}`,
+    );
+  }
+
+  return account.owner;
+}
+
 async function readCurveInventory(
   connection: Connection,
   associatedBondingCurve: PublicKey,
 ) {
   try {
-    const balance = await connection.getTokenAccountBalance(
-      associatedBondingCurve,
-      "confirmed",
+    const balance = await withRpcRetry(() =>
+      connection.getTokenAccountBalance(
+        associatedBondingCurve,
+        "confirmed",
+      ),
     );
     return BigInt(balance.value.amount);
-  } catch {
+  } catch (error) {
+    if (isRpcRateLimit(error)) throw error;
+
     // A freshly migrated / unusual coin may no longer have the expected ATA.
-    // Treat it as zero rather than fabricating a value.
+    // Treat a genuinely missing/unreadable curve token account as zero.
     return 0n;
   }
 }
@@ -71,13 +109,25 @@ export async function buildTokenSnapshot(
   mintAddress: string,
 ): Promise<TokenSnapshot> {
   const mint = new PublicKey(mintAddress);
-  const { bondingCurve, associatedBondingCurve } = derivePumpCurveAccounts(mint);
+  const tokenProgram = await resolveMintTokenProgram(connection, mint);
+  const { bondingCurve, associatedBondingCurve } = derivePumpCurveAccounts(
+    mint,
+    tokenProgram,
+  );
 
-  const [supplyResponse, largestResponse, curveInventory] = await Promise.all([
+  // Keep the required snapshot calls paced and retryable. The public Solana
+  // endpoint has strict per-method limits, while dedicated RPCs complete these
+  // immediately.
+  const supplyResponse = await withRpcRetry(() =>
     connection.getTokenSupply(mint, "confirmed"),
+  );
+  const largestResponse = await withRpcRetry(() =>
     connection.getTokenLargestAccounts(mint, "confirmed"),
-    readCurveInventory(connection, associatedBondingCurve),
-  ]);
+  );
+  const curveInventory = await readCurveInventory(
+    connection,
+    associatedBondingCurve,
+  );
 
   const rawSupply = BigInt(supplyResponse.value.amount);
   const rawExternalSupply = clampSub(rawSupply, curveInventory);
@@ -86,9 +136,11 @@ export async function buildTokenSnapshot(
     (row) => !row.address.equals(associatedBondingCurve),
   );
 
-  const accountInfos = await connection.getMultipleAccountsInfo(
-    externalAccounts.map((row) => row.address),
-    "confirmed",
+  const accountInfos = await withRpcRetry(() =>
+    connection.getMultipleAccountsInfo(
+      externalAccounts.map((row) => row.address),
+      "confirmed",
+    ),
   );
 
   const holders: HolderRow[] = externalAccounts.map((row, index) => {
