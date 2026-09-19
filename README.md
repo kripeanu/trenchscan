@@ -138,6 +138,8 @@ The replay API also accepts an exact transaction signature so a known launch can
 
 Replay links are now shareable with `?replay=<transaction-signature>`. Opening one automatically loads that real transaction into TrenchScan, which makes a judge/demo flow reproducible instead of relying on whatever launches happen to appear live.
 
+The homepage demo button now uses one **verified mainnet receipt** that TrenchScan itself caught during the runtime verification. This avoids burning a pile of discovery RPC calls in front of a judge while keeping the demo tied to a real transaction rather than seeded token data. The full judge-safe sequence lives in `docs/colosseum-demo.md`.
+
 Inside the token scan, **RUN FULL RECEIPT PASS** runs the optional evidence checks together once the early-buyer replay is ready:
 
 - Who Jeeted current-balance retention
@@ -268,4 +270,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.22 — StonkFun mainnet replay probe`
+`v0.23 — deterministic verified-mainnet judge replay`
