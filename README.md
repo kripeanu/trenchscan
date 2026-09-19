@@ -260,11 +260,23 @@ It subscribes only while a client is connected, wakes the exact transaction deco
 
 The stream remains separate from the Pump dashboard until LaunchLab-specific early-buyer semantics are verified. `/api/health` exposes its listener state, verified buffer, candidate count and generic-LaunchLab rejection count.
 
+### StonkFun early-buyer receipts
+
+LaunchLab now has its own early-buyer semantics instead of borrowing Pump's curve logic.
+
+`GET /api/stonkfun/early-buyers/<launch-signature>` verifies the StonkFun launch first, walks a bounded history of that exact LaunchLab `pool_state`, and only emits a buyer row when **both** conditions hold:
+
+1. the transaction contains a Raydium LaunchLab `buy_exact_in` or `buy_exact_out` instruction whose platform config, pool state, base mint and base vault all match the verified launch;
+2. the instruction payer has a positive balance delta for the launch's base token.
+
+The same layer now appears in `/api/stonkfun/analyze/<launch-signature>` as independent evidence coverage. If the bounded pool history does not reach the launch receipt, `historyComplete` is false and TrenchScan does not claim the returned wallets are literally the first buyers.
+
 ## What comes next
 
 - stronger dev history context without inventing "rug" labels
-- add LaunchLab-specific early-buyer semantics before live-wiring StonkFun into the shared dashboard
+- runtime-verify LaunchLab early-buyer replay on a fresh StonkFun launch
 - verify source-aware StonkFun holder distribution on a dedicated RPC without public-endpoint throttling
+- build the source-aware StonkFun dashboard panel before merging launchpad feeds
 - additional Solana launchpads after the Pump path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
@@ -303,4 +315,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.26 — mainnet-verified StonkFun adapter + isolated live stream`
+`v0.27 — LaunchLab-specific early-buyer receipts`
