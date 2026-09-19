@@ -6,6 +6,10 @@ on:
     branches:
       - feat/mainnet-runtime-verify
 
+concurrency:
+  group: mainnet-runtime-verify-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify-mainnet:
     runs-on: ubuntu-latest
