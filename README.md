@@ -110,6 +110,12 @@ Inside the token scan, **RUN FULL RECEIPT PASS** runs the two optional relations
 
 The individual controls remain available, but the one-click pass is the faster demo path.
 
+### Share + proof pack
+
+The Trench Brief can now be copied as compact trench-native text with the replay URL attached. The same panel can export a versioned JSON proof pack containing the launch, holder snapshot, early-buyer replay, funding relationships, dev history, derived brief, explorer receipt links and explicit limitations.
+
+That means a result can be shared without hiding how TrenchScan got there.
+
 ## What comes next
 
 - visual funding graph / relationship map on top of the new upstream evidence
@@ -152,4 +158,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.11 — wallet fingerprints + one-hop-upstream funding families`
+`v0.12 — copyable Trench Brief + versioned receipt proof packs`
