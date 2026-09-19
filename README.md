@@ -65,6 +65,8 @@ The pass now shows:
 
 This is deliberately evidence-first. A fresh-looking wallet is based on bounded sampled history, not a claim that an address has never existed before. A shared direct or upstream funder is a **clue, not proof of common control**; CEX hot wallets and payout services can connect unrelated traders.
 
+The same evidence now feeds a visual **MONEY TRAIL** map: upstream source → direct funder → early buyer. Nodes open in Solscan and the underlying funding receipts remain directly below the graph, so the visualization never replaces the evidence.
+
 ### Dev baggage
 
 TrenchScan can also sample the creator wallet's recent history immediately before the current launch and look for prior Pump `create_v2` transactions by that same creator.
@@ -118,8 +120,8 @@ That means a result can be shared without hiding how TrenchScan got there.
 
 ## What comes next
 
-- visual funding graph / relationship map on top of the new upstream evidence
 - stronger dev history context without inventing "rug" labels
+- launchpad adapter work after the Pump v1 path is runtime-verified
 - additional Solana launchpads after the Pump v1 path is stable
 
 No mystery AI risk score. If TrenchScan says something looks coordinated, the wallets and transactions should be right there.
@@ -158,4 +160,4 @@ Then open `http://localhost:3000`.
 
 ## Status
 
-`v0.12 — copyable Trench Brief + versioned receipt proof packs`
+`v0.13 — visual money trail from upstream source to early buyer`

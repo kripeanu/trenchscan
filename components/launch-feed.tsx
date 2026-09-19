@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FundingMap } from "@/components/funding-map";
 import { TrenchBrand } from "@/components/trench-brand";
 import { buildTrenchBrief } from "@/lib/trench-brief";
 import { buildProofPack, buildShareText } from "@/lib/proof-pack";
@@ -1038,6 +1039,10 @@ export function LaunchFeed() {
                               ))}
                             </div>
 
+                            {fundingTrace.links.length > 0 && (
+                              <FundingMap trace={fundingTrace} />
+                            )}
+
                             {fundingTrace.clusters.length ? (
                               <div className="cluster-grid">
                                 {fundingTrace.clusters.slice(0, 4).map((cluster) => (
@@ -1351,7 +1356,7 @@ export function LaunchFeed() {
       )}
 
       <footer className="footer-note">
-        <span>TrenchScan v0.12 · built for trenchers · backed by chain data</span>
+        <span>TrenchScan v0.13 · built for trenchers · backed by chain data</span>
         <span>live feed + real-launch replay · every signal stays receipt-backed</span>
       </footer>
     </main>
